@@ -190,6 +190,9 @@ export async function generateText({
         console.error("generateText context is empty");
         return "";
     }
+    console.log("********************");
+    console.log(context);
+    console.log("********************");
 
     elizaLogger.log("Generating text...");
 

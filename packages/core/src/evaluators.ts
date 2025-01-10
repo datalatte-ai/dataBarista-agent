@@ -17,7 +17,7 @@ INSTRUCTIONS: You are helping me to decide which appropriate functions to call b
 Evaluator Functions:
 {{evaluators}}
 
-TASK: Based on the most recent conversation, determine which evaluators functions are appropriate to call to call.
+TASK: Based on the most recent conversation, determine which evaluators functions are appropriate to call.
 Include the name of evaluators that are relevant and should be called in the array
 Available evaluator names to include are {{evaluatorNames}}
 ` + stringArrayFooter;
