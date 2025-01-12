@@ -5,7 +5,7 @@ import { REQUIRED_FIELDS } from "../constants";
 const matchIntentionProvider: Provider = {
     get: async (runtime: IAgentRuntime, message: Memory, state?: State) => {
         try {
-            const username = message.content.source === "telegram" ? message.content.text.split(":")[0].trim() : message.userId;
+            const username = state?.senderName || message.userId;
             const cacheKey = `${runtime.character.name}/${username}/data`;
 
             const cached = await runtime.cacheManager.get<MatchIntentionCache>(cacheKey);
