@@ -6,42 +6,38 @@ import {
     State,
     HandlerCallback,
     Content,
+    ModelClass,
+    generateObjectArray,
+    composeContext,
 } from "@elizaos/core";
 import { MatchPool, MatchPoolCache, MatchIntention, MatchIntentionCache } from "../types";
 
-interface MatchScore {
-    score: number;
-    reasons: string[];
-}
+const matchEvaluationTemplate = `
+TASK: Evaluate if these users would be a good professional networking match.
 
-interface MatchResult {
-    user: MatchPool;
-    matchScore: MatchScore;
-}
+Current User:
+Username: {{currentUser.username}}
+Networking Goal: {{currentUser.matchIntention.networkingGoal}}
+Industry Interests: {{currentUser.matchIntention.industryPreference}}
 
-function calculateMatchScore(user1: MatchIntention, user2: MatchIntention): MatchScore {
-    const score: MatchScore = { score: 0, reasons: [] };
+Potential Match:
+Username: {{potentialMatch.username}}
+Networking Goal: {{potentialMatch.matchIntention.networkingGoal}}
+Industry Interests: {{potentialMatch.matchIntention.industryPreference}}
 
-    // Check networking goals
-    if (user1.networkingGoal === user2.networkingGoal) {
-        score.score += 40;
-        score.reasons.push("Matching networking goals");
-    }
+Format the response as an array of objects with the following structure:
+[{
+    "isMatch": boolean,
+    "reasons": string[]
+}]
 
-    // Check industry preferences
-    const commonIndustries = user1.industryPreference?.filter(
-        ind => user2.industryPreference?.includes(ind)
-    );
-    if (commonIndustries?.length) {
-        score.score += 30 * (commonIndustries.length / Math.max(
-            user1.industryPreference?.length || 1,
-            user2.industryPreference?.length || 1
-        ));
-        score.reasons.push(`Common industries: ${commonIndustries.join(", ")}`);
-    }
+Consider:
+1. Alignment of networking goals
+2. Overlap in industry interests
+3. Potential for meaningful professional connection
 
-    return score;
-}
+Return an empty array if you cannot make a determination.
+`;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -60,6 +56,8 @@ export const serendipityAction: Action = {
     validate: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {
             const username = state?.senderName || message.userId;
+
+            // Get user's profile
             const userCacheKey = `${runtime.character.name}/${username}/data`;
             const userIntentionCache = await runtime.cacheManager.get<MatchIntentionCache>(userCacheKey);
 
@@ -85,59 +83,14 @@ export const serendipityAction: Action = {
         callback?: HandlerCallback
     ): Promise<Content | void> => {
         try {
-            const MATCH_THRESHOLD = 60; // Minimum score for a match
             const username = state?.senderName || message.userId;
 
-            // Get current user's intention
+            // Get user's profile
             const userCacheKey = `${runtime.character.name}/${username}/data`;
             const userIntentionCache = await runtime.cacheManager.get<MatchIntentionCache>(userCacheKey);
 
             if (!userIntentionCache?.data?.completed) {
                 return;
-            }
-
-            // Get pool
-            const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool");
-            if (!poolCache?.pools?.length) {
-                return;
-            }
-
-            // Calculate scores for all users
-            const matches = await Promise.all(poolCache.pools
-                .filter(p => p.userId !== message.userId) // Filter out self
-                .map(async p => {
-                    return {
-                        user: p,
-                        matchScore: calculateMatchScore(userIntentionCache.data, p.matchIntention)
-                    };
-                }))
-                .then(results => results
-                    .filter(m => m.matchScore.score >= MATCH_THRESHOLD)
-                    .sort((a, b) => b.matchScore.score - a.matchScore.score)
-                );
-
-            if (!matches.length) {
-                return;
-            }
-
-            // Get the best match
-            const bestMatch = matches[0];
-
-            // Update the matched user's last active time
-            if (poolCache?.pools) {
-                const now = Date.now();
-                const updatedPools = poolCache.pools.map(p =>
-                    p.userId === bestMatch.user.userId
-                        ? { ...p, lastActive: now }
-                        : p
-                );
-
-                await runtime.cacheManager.set("matchmaker/pool", {
-                    pools: updatedPools,
-                    lastUpdated: now
-                }, {
-                    expires: now + (30 * 24 * 60 * 60 * 1000) // 30 days
-                });
             }
 
             // Get username from state or database
@@ -147,7 +100,7 @@ export const serendipityAction: Action = {
                 displayUsername = userData?.username || username;
             }
 
-            // Update current user in pool
+            // Create current user object
             const currentUser: MatchPool = {
                 userId: message.userId,
                 username: displayUsername,
@@ -155,27 +108,79 @@ export const serendipityAction: Action = {
                 lastActive: Date.now()
             };
 
-            const updatedPools = poolCache.pools
-                .filter(p => p.userId !== message.userId)
-                .concat(currentUser);
-
-            await runtime.cacheManager.set("matchmaker/pool", {
-                pools: updatedPools,
-                lastUpdated: Date.now()
-            }, {
-                expires: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days
-            });
-
-            const response: Content = {
-                text: `I found a great networking match for you! @${bestMatch.user.username} is also interested in ${bestMatch.user.matchIntention.industryPreference?.join(", ")}. Their networking goal is: ${bestMatch.user.matchIntention.networkingGoal}. Match score: ${bestMatch.matchScore.score}% (${bestMatch.matchScore.reasons.join(", ")}). Would you like me to make an introduction?`,
-                action: "SERENDIPITY"
-            };
-
-            if (callback) {
-                await callback(response);
+            // Get pool and update with current user
+            const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool");
+            if (!poolCache?.pools?.length) {
+                // If pool is empty, just add current user
+                await runtime.cacheManager.set("matchmaker/pool", {
+                    pools: [currentUser],
+                    lastUpdated: Date.now()
+                }, {
+                    expires: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days
+                });
+                return;
             }
 
-            return response;
+            // Find potential matches
+            for (const potentialMatch of poolCache.pools) {
+                if (potentialMatch.userId === message.userId) continue;
+
+                // Prepare evaluation state
+                const evaluationState: State = {
+                    currentUser,
+                    potentialMatch,
+                    bio: "",
+                    lore: "",
+                    messageDirections: "",
+                    postDirections: "",
+                    recentMessages: "",
+                    senderName: username,
+                    agentName: runtime.character.name,
+                    actorsData: [],
+                    recentMessagesData: [],
+                    roomId: message.roomId,
+                    actors: ""
+                };
+
+                const context = composeContext({
+                    template: matchEvaluationTemplate,
+                    state: evaluationState
+                });
+
+                const results = await generateObjectArray({
+                    runtime,
+                    context,
+                    modelClass: ModelClass.SMALL
+                });
+
+                if (results?.[0]?.isMatch) {
+                    // Update pool with current user
+                    const updatedPools = poolCache.pools
+                        .filter(p => p.userId !== message.userId)
+                        .concat(currentUser);
+
+                    await runtime.cacheManager.set("matchmaker/pool", {
+                        pools: updatedPools,
+                        lastUpdated: Date.now()
+                    }, {
+                        expires: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days
+                    });
+
+                    // Return match notification
+                    const response: Content = {
+                        text: `I found a great networking match for you! @${potentialMatch.username} is also interested in ${potentialMatch.matchIntention.industryPreference?.join(", ")}. Their networking goal is: ${potentialMatch.matchIntention.networkingGoal}. Reasons for match: ${results[0].reasons.join(", ")}. Would you like me to make an introduction?`,
+                        action: "SERENDIPITY"
+                    };
+
+                    if (callback) {
+                        await callback(response);
+                    }
+
+                    return response;
+                }
+            }
+
+            return;
         } catch (error) {
             console.error("Error in serendipity handler:", error);
             return;
@@ -193,7 +198,7 @@ export const serendipityAction: Action = {
             {
                 user: "{{user2}}",
                 content: {
-                    text: "I found a great networking match for you! @techpro is also interested in Software Development, AI. Their networking goal is: Looking for mentorship opportunities in tech startups. Match score: 85% (Matching networking goals, Common industries: Software Development, AI). Would you like me to make an introduction?",
+                    text: "I found a great networking match for you! @techpro is also interested in Software Development, AI. Their networking goal is: Looking for mentorship opportunities in tech startups. Reasons for match: Aligned industry interests in AI, Shared goal of professional collaboration. Would you like me to make an introduction?",
                     action: "SERENDIPITY"
                 },
             },
@@ -208,7 +213,7 @@ export const serendipityAction: Action = {
             {
                 user: "{{user2}}",
                 content: {
-                    text: "I found a great networking match for you! @fintech_expert is also interested in Financial Technology, Blockchain. Their networking goal is: Seeking collaboration on innovative fintech projects. Match score: 90% (Matching networking goals, Common industries: Financial Technology, Blockchain). Would you like me to make an introduction?",
+                    text: "I found a great networking match for you! @fintech_expert is also interested in Financial Technology, Blockchain. Their networking goal is: Seeking collaboration on innovative fintech projects. Reasons for match: Common interest in fintech industry, Both looking for project collaboration. Would you like me to make an introduction?",
                     action: "SERENDIPITY"
                 },
             },
@@ -223,7 +228,7 @@ export const serendipityAction: Action = {
             {
                 user: "{{user2}}",
                 content: {
-                    text: "I found a great networking match for you! @startup_founder is also interested in Entrepreneurship, Technology. Their networking goal is: Looking to connect with other founders for potential partnerships. Match score: 75% (Matching networking goals, Common industries: Technology). Would you like me to make an introduction?",
+                    text: "I found a great networking match for you! @startup_founder is also interested in Entrepreneurship, Technology. Their networking goal is: Looking to connect with other founders for potential partnerships. Reasons for match: Shared entrepreneurial focus, Complementary technology interests. Would you like me to make an introduction?",
                     action: "SERENDIPITY"
                 },
             },
