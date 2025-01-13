@@ -110,6 +110,9 @@ const telegramMessageHandlerTemplate =
     // {{goals}}
     `
 
+# Example Actions
+{{exampleActions}}
+
 # Knowledge
 {{knowledge}}
 
@@ -124,6 +127,7 @@ const telegramMessageHandlerTemplate =
 {{attachments}}
 
 {{actions}}
+SERENDIPITY: Evaluates potential matches and notifies users when a compatible networking match is found.
 
 {{messageDirections}}
 

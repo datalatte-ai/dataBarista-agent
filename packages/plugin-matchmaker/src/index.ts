@@ -4,7 +4,6 @@ import { continueAction } from "./actions/continue.ts";
 import { ignoreAction } from "./actions/ignore.ts";
 import { noneAction } from "./actions/none.ts";
 import { matchIntentionEvaluator } from "./evaluators/matchIntentionEvaluator.ts";
-import { matchScoreEvaluator } from "./evaluators/matchScoreEvaluator.ts";
 import { matchIntentionProvider } from "./providers/matchIntentionProvider.ts";
 import { matchPoolProvider } from "./providers/matchPoolProvider.ts";
 
@@ -21,6 +20,6 @@ export const matchmakerPlugin: Plugin = {
         ignoreAction,
         noneAction,
     ],
-    evaluators: [matchIntentionEvaluator, matchScoreEvaluator],
+    evaluators: [matchIntentionEvaluator],
     providers: [matchIntentionProvider, matchPoolProvider],
 };

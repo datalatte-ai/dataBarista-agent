@@ -1,27 +1,51 @@
 import {
+    Action,
     ActionExample,
     IAgentRuntime,
     Memory,
-    type Action,
+    State,
+    HandlerCallback,
+    Content,
 } from "@elizaos/core";
-import { MatchPool } from "../types";
+import { MatchPool, MatchPoolCache, MatchIntention, MatchIntentionCache } from "../types";
+
+interface MatchScore {
+    score: number;
+    reasons: string[];
+}
 
 interface MatchResult {
     user: MatchPool;
-    matchScore: {
-        score: number;
-        reasons: string[];
-    };
+    matchScore: MatchScore;
 }
 
-interface StoredMatches {
-    matches: MatchResult[];
-    lastUpdated: number;
+function calculateMatchScore(user1: MatchIntention, user2: MatchIntention): MatchScore {
+    const score: MatchScore = { score: 0, reasons: [] };
+
+    // Check networking goals
+    if (user1.networkingGoal === user2.networkingGoal) {
+        score.score += 40;
+        score.reasons.push("Matching networking goals");
+    }
+
+    // Check industry preferences
+    const commonIndustries = user1.industryPreference?.filter(
+        ind => user2.industryPreference?.includes(ind)
+    );
+    if (commonIndustries?.length) {
+        score.score += 30 * (commonIndustries.length / Math.max(
+            user1.industryPreference?.length || 1,
+            user2.industryPreference?.length || 1
+        ));
+        score.reasons.push(`Common industries: ${commonIndustries.join(", ")}`);
+    }
+
+    return score;
 }
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
-    description: "Notifies users when a compatible networking match is found and facilitates introduction via telegram usernames",
+    description: "Evaluates potential matches and notifies users when a compatible networking match is found",
     similes: [
         "NOTIFY_MATCH",
         "INTRODUCE_MATCH",
@@ -33,34 +57,128 @@ export const serendipityAction: Action = {
         "MATCH_FOUND"
     ],
 
-    validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+    validate: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {
-            const matchesKey = `${runtime.character.name}/${message.userId}/matches`;
-            const storedMatches = await runtime.cacheManager.get<StoredMatches>(matchesKey);
-            return !!storedMatches?.matches?.length;
+            const username = state?.senderName || message.userId;
+            const userCacheKey = `${runtime.character.name}/${username}/data`;
+            const userIntentionCache = await runtime.cacheManager.get<MatchIntentionCache>(userCacheKey);
+
+            // Only proceed if user has completed their profile
+            if (!userIntentionCache?.data?.completed) {
+                return false;
+            }
+
+            // Check if there are potential matches in the pool
+            const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool");
+            return !!poolCache?.pools?.some(p => p.userId !== message.userId);
         } catch (error) {
             console.error("Error in serendipity validate:", error);
             return false;
         }
     },
 
-    handler: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+    handler: async (
+        runtime: IAgentRuntime,
+        message: Memory,
+        state?: State,
+        options?: any,
+        callback?: HandlerCallback
+    ): Promise<Content | void> => {
         try {
-            const matchesKey = `${runtime.character.name}/${message.userId}/matches`;
-            const storedMatches = await runtime.cacheManager.get<StoredMatches>(matchesKey);
+            const MATCH_THRESHOLD = 60; // Minimum score for a match
+            const username = state?.senderName || message.userId;
 
-            if (!storedMatches?.matches?.length) {
-                return false;
+            // Get current user's intention
+            const userCacheKey = `${runtime.character.name}/${username}/data`;
+            const userIntentionCache = await runtime.cacheManager.get<MatchIntentionCache>(userCacheKey);
+
+            if (!userIntentionCache?.data?.completed) {
+                return;
             }
 
-            // Get the best match and clear cache after processing
-            const bestMatch = storedMatches.matches[0];
-            await runtime.cacheManager.delete(matchesKey);
+            // Get pool
+            const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool");
+            if (!poolCache?.pools?.length) {
+                return;
+            }
 
-            return true;
+            // Calculate scores for all users
+            const matches = await Promise.all(poolCache.pools
+                .filter(p => p.userId !== message.userId) // Filter out self
+                .map(async p => {
+                    return {
+                        user: p,
+                        matchScore: calculateMatchScore(userIntentionCache.data, p.matchIntention)
+                    };
+                }))
+                .then(results => results
+                    .filter(m => m.matchScore.score >= MATCH_THRESHOLD)
+                    .sort((a, b) => b.matchScore.score - a.matchScore.score)
+                );
+
+            if (!matches.length) {
+                return;
+            }
+
+            // Get the best match
+            const bestMatch = matches[0];
+
+            // Update the matched user's last active time
+            if (poolCache?.pools) {
+                const now = Date.now();
+                const updatedPools = poolCache.pools.map(p =>
+                    p.userId === bestMatch.user.userId
+                        ? { ...p, lastActive: now }
+                        : p
+                );
+
+                await runtime.cacheManager.set("matchmaker/pool", {
+                    pools: updatedPools,
+                    lastUpdated: now
+                }, {
+                    expires: now + (30 * 24 * 60 * 60 * 1000) // 30 days
+                });
+            }
+
+            // Get username from state or database
+            let displayUsername = username;
+            if (!state?.senderName) {
+                const userData = await runtime.databaseAdapter.getAccountById(message.userId);
+                displayUsername = userData?.username || username;
+            }
+
+            // Update current user in pool
+            const currentUser: MatchPool = {
+                userId: message.userId,
+                username: displayUsername,
+                matchIntention: userIntentionCache.data,
+                lastActive: Date.now()
+            };
+
+            const updatedPools = poolCache.pools
+                .filter(p => p.userId !== message.userId)
+                .concat(currentUser);
+
+            await runtime.cacheManager.set("matchmaker/pool", {
+                pools: updatedPools,
+                lastUpdated: Date.now()
+            }, {
+                expires: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days
+            });
+
+            const response: Content = {
+                text: `I found a great networking match for you! @${bestMatch.user.username} is also interested in ${bestMatch.user.matchIntention.industryPreference?.join(", ")}. Their networking goal is: ${bestMatch.user.matchIntention.networkingGoal}. Match score: ${bestMatch.matchScore.score}% (${bestMatch.matchScore.reasons.join(", ")}). Would you like me to make an introduction?`,
+                action: "SERENDIPITY"
+            };
+
+            if (callback) {
+                await callback(response);
+            }
+
+            return response;
         } catch (error) {
             console.error("Error in serendipity handler:", error);
-            return false;
+            return;
         }
     },
 
@@ -68,98 +186,47 @@ export const serendipityAction: Action = {
         [
             {
                 user: "{{user1}}",
-                content: { text: "Looking for networking opportunities in tech" }
+                content: {
+                    text: "I'm looking to connect with other tech professionals",
+                },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "I found someone who might be a great connection for you! They're a senior developer at a tech startup with expertise in AI and blockchain. Their match score is 90% based on your interests. Would you like to connect with @techmentor42?",
+                    text: "I found a great networking match for you! @techpro is also interested in Software Development, AI. Their networking goal is: Looking for mentorship opportunities in tech startups. Match score: 85% (Matching networking goals, Common industries: Software Development, AI). Would you like me to make an introduction?",
                     action: "SERENDIPITY"
-                }
+                },
             },
-            {
-                user: "{{user1}}",
-                content: { text: "Yes, that sounds perfect!" }
-            },
-            {
-                user: "{{user2}}",
-                content: {
-                    text: "Great! I'll let them know about your interest. They're particularly keen on mentoring in AI development.",
-                    action: "NONE"
-                }
-            }
         ],
         [
             {
                 user: "{{user1}}",
-                content: { text: "Any interesting matches today?" }
+                content: {
+                    text: "Looking for fintech connections",
+                },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "Actually, yes! I found someone in the fintech industry who's looking to expand their professional network. They have an 85% match score with your interests. Their username is @blockchain_dev88 - would you like an introduction?",
+                    text: "I found a great networking match for you! @fintech_expert is also interested in Financial Technology, Blockchain. Their networking goal is: Seeking collaboration on innovative fintech projects. Match score: 90% (Matching networking goals, Common industries: Financial Technology, Blockchain). Would you like me to make an introduction?",
                     action: "SERENDIPITY"
-                }
+                },
             },
-            {
-                user: "{{user1}}",
-                content: { text: "Not at the moment, thanks" }
-            },
-            {
-                user: "{{user2}}",
-                content: {
-                    text: "No problem! I'll keep looking for other potential matches that better align with your current interests.",
-                    action: "NONE"
-                }
-            }
         ],
         [
             {
                 user: "{{user1}}",
-                content: { text: "Hey, I'm looking to connect with other startup founders" }
+                content: {
+                    text: "Need to expand my startup network",
+                },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "Perfect timing! I just found a match with a startup founder in your industry. They're working on AI-powered analytics and looking to connect with other founders. Their username is @startup_founder99. The match score is 95% based on your shared interests and goals. Would you like me to facilitate an introduction?",
+                    text: "I found a great networking match for you! @startup_founder is also interested in Entrepreneurship, Technology. Their networking goal is: Looking to connect with other founders for potential partnerships. Match score: 75% (Matching networking goals, Common industries: Technology). Would you like me to make an introduction?",
                     action: "SERENDIPITY"
-                }
+                },
             },
-            {
-                user: "{{user1}}",
-                content: { text: "Absolutely, please do!" }
-            },
-            {
-                user: "{{user2}}",
-                content: {
-                    text: "Excellent! I'll reach out to them with your information. They're particularly interested in discussing scaling strategies and AI implementation.",
-                    action: "NONE"
-                }
-            }
-        ],
-        [
-            {
-                user: "{{user1}}",
-                content: { text: "Show me my matches" }
-            },
-            {
-                user: "{{user2}}",
-                content: {
-                    text: "I found a promising connection! They're a product manager with experience in AI and machine learning. Match score is 88% based on your shared interest in product development. Their username is @product_guru. Would you like to connect?",
-                    action: "SERENDIPITY"
-                }
-            },
-            {
-                user: "{{user1}}",
-                content: { text: "Can you tell me more about their background?" }
-            },
-            {
-                user: "{{user2}}",
-                content: {
-                    text: "They have 5 years of experience leading AI products and are looking to exchange insights about product development in the AI space. They're also interested in mentoring other product managers.",
-                    action: "NONE"
-                }
-            }
         ]
     ] as ActionExample[][],
-} as Action;
+};

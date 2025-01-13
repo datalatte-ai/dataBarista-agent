@@ -1,37 +1,37 @@
-import { IAgentRuntime, Memory, Provider } from "@elizaos/core";
+import { IAgentRuntime, Memory, Provider, State } from "@elizaos/core";
 import { MatchPool, MatchPoolCache, MatchIntention, MatchIntentionCache } from "../types";
 
 const POOL_CACHE_KEY = "matchmaker/pool";
 const ACTIVE_THRESHOLD = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 const matchPoolProvider: Provider = {
-    get: async (runtime: IAgentRuntime, message: Memory) => {
+    get: async (runtime: IAgentRuntime, message: Memory, state?: State) => {
         try {
+            const username = state?.senderName || message.userId;
+
             // Get current user's match intention
-            const userCacheKey = `${runtime.character.name}/${message.userId}/data`;
+            const userCacheKey = `${runtime.character.name}/${username}/data`;
             const userIntentionCache = await runtime.cacheManager.get<MatchIntentionCache>(userCacheKey);
 
             if (!userIntentionCache?.data) {
-                return "No matching profile found. Please complete your networking preferences first.";
+                return "No matching profile found yet in the pool. Please complete your networking preferences first.";
             }
 
             // Get or initialize pool
             const poolCache = await runtime.cacheManager.get<MatchPoolCache>(POOL_CACHE_KEY);
             let pool = poolCache?.pools || [];
 
-            // Get username from actors data
-            const actorsData = await runtime.databaseAdapter.getParticipantsForRoom(message.roomId);
-            const userData = await runtime.databaseAdapter.getAccountById(message.userId);
-            const username = userData?.username;
-
-            if (!username) {
-                return "Unable to find username. Please ensure your account is properly connected.";
+            // Get username from state or database
+            let displayUsername = username;
+            if (!state?.senderName) {
+                const userData = await runtime.databaseAdapter.getAccountById(message.userId);
+                displayUsername = userData?.username || username;
             }
 
             // Update/add current user to pool
             const currentUser: MatchPool = {
-                userId: message.userId, // UUID for internal reference
-                username: username, // For introductions
+                userId: message.userId,
+                username: displayUsername,
                 matchIntention: userIntentionCache.data,
                 lastActive: Date.now()
             };
@@ -45,10 +45,12 @@ const matchPoolProvider: Provider = {
             pool = pool.filter(p => (now - p.lastActive) < ACTIVE_THRESHOLD);
 
             // Save updated pool
-            await runtime.cacheManager.set(POOL_CACHE_KEY, {
+            const poolCacheData: MatchPoolCache = {
                 pools: pool,
                 lastUpdated: now
-            }, {
+            };
+
+            await runtime.cacheManager.set(POOL_CACHE_KEY, poolCacheData, {
                 expires: now + ACTIVE_THRESHOLD
             });
 

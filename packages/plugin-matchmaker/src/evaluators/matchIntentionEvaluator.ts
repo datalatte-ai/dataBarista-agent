@@ -31,9 +31,9 @@ export const matchIntentionEvaluator: Evaluator = {
     similes: ["EXTRACT_NETWORKING_PREFERENCES", "GET_PROFESSIONAL_PREFERENCES"],
     description: "Extracts and stores user's professional networking intentions and preferences",
 
-    validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+    validate: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {
-            const username = message.userId;
+            const username = state?.senderName || message.userId;
             const cacheKey = `${runtime.character.name}/${username}/data`;
             const cached = await runtime.cacheManager.get<MatchIntentionCache>(cacheKey);
             return !cached?.data?.completed;
@@ -43,36 +43,34 @@ export const matchIntentionEvaluator: Evaluator = {
         }
     },
 
-    handler: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+    handler: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {
-            const username = message.userId;
+            const username = state?.senderName || message.userId;
             const cacheKey = `${runtime.character.name}/${username}/data`;
 
+            // Get current data from cache
             const cached = await runtime.cacheManager.get<MatchIntentionCache>(cacheKey);
-            const currentData = cached?.data || { completed: false };
+            const currentData: MatchIntention = cached?.data || { completed: false };
 
-            const state: State = {
+            // Prepare state for extraction
+            const extractionState: State = {
                 bio: "",
                 lore: "",
                 messageDirections: "",
                 postDirections: "",
                 recentMessages: message.content.text,
                 currentInfo: JSON.stringify(currentData, null, 2),
-                senderName: message.userId,
+                senderName: username,
                 agentName: runtime.character.name,
                 actorsData: [],
                 recentMessagesData: [],
                 roomId: message.roomId,
-                actors: "",
-                recentMessagesContext: "",
-                messageContext: "",
-                postContext: "",
-                preContext: ""
+                actors: ""
             };
 
             const context = composeContext({
                 template: extractionTemplate,
-                state
+                state: extractionState
             });
 
             const results = await generateObjectArray({
@@ -86,21 +84,27 @@ export const matchIntentionEvaluator: Evaluator = {
             }
 
             const extractedData = results[0];
+
+            // Merge existing data with new data
             const newData: MatchIntention = {
-                ...currentData,
-                ...extractedData,
+                networkingGoal: extractedData.networkingGoal || currentData.networkingGoal,
+                industryPreference: extractedData.industryPreference || currentData.industryPreference,
                 completed: false
             };
 
+            // Check if all required fields are present
             const isComplete = REQUIRED_FIELDS.every(field => newData[field]);
             if (isComplete) {
                 newData.completed = true;
             }
 
-            await runtime.cacheManager.set(cacheKey, {
+            // Store updated data in cache
+            const cacheData: MatchIntentionCache = {
                 data: newData,
                 lastUpdated: Date.now()
-            }, {
+            };
+
+            await runtime.cacheManager.set(cacheKey, cacheData, {
                 expires: Date.now() + (7 * 24 * 60 * 60 * 1000) // 1 week
             });
 
