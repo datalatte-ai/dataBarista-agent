@@ -31,7 +31,7 @@ Professional Networking Profile for @${username}:
 - Industries: ${data.industryPreference?.join(", ")}
 
 Instructions for agent:
-The networking profile is complete. matchPoolProvider function should run to see if we can find a match.
+The networking profile is complete.
 `;
             }
 

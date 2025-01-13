@@ -127,7 +127,7 @@ const telegramMessageHandlerTemplate =
 
 {{attachments}}
 
-{{actions}}SERENDIPITY: Evaluates potential matches and notifies users when a compatible networking match is found.
+{{actions}}
 
 {{messageDirections}}
 
