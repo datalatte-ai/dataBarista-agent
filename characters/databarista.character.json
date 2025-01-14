@@ -112,8 +112,7 @@
         {
           "user": "{{Agentname}}",
           "content": {
-            "text": "Great! I'll facilitate the introduction. I've notified them about your interest in collaboration on ethical AI implementation. (NONE)",
-            "action": "NONE"
+            "text": "Great! I'll facilitate the introduction. I've notified them about your interest in collaboration on ethical AI implementation. (NONE)"
           }
         }
       ]
