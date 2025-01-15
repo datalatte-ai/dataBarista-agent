@@ -13,8 +13,8 @@ Current known information:
 {{currentInfo}}
 
 Extract any new information about:
-1. Networking goals (mentorship, collaboration, business partnerships)
-2. Industry preferences (specific industries they're interested in)
+1. Their networking goals (Vibing with similar people, finding users, seeking job, finding partners, finding collaborators, seeking grants or intevstments, hiring talents, learning from expewrts, seeking advise, investing, or ask for more accurate description.)
+2. Professional Interests (AI, AI agents, privacy, data rights, DeFi, AiFi, etc.)
 
 Format the response as an array of objects with the following structure:
 [{
@@ -122,11 +122,11 @@ export const matchIntentionEvaluator: Evaluator = {
                 {
                     user: "User",
                     content: {
-                        text: "I'm looking to connect with experienced tech leads in the AI industry"
+                        text: "I'm looking to find people who like privacy and data rights in web3 space"
                     }
                 },
                 {
-                    user: "Agent",
+                    user: "dataBarista",
                     content: {
                         text: "What kind of networking opportunity are you looking for specifically?"
                     }
@@ -134,11 +134,11 @@ export const matchIntentionEvaluator: Evaluator = {
                 {
                     user: "User",
                     content: {
-                        text: "Mainly mentorship and possibly collaboration on open source projects"
+                        text: "Mainly technical collaboration and possibly mentorship on open source projects"
                     }
                 }
             ],
-            outcome: "Extracted industry preference (AI) and networking goal (mentorship, collaboration)"
+            outcome: "Extracted interests in privacy and data rights in web3 space and networking goal (technical collaboration and possibly mentorship with privacy and data rights focus)"
         }
     ]
 };

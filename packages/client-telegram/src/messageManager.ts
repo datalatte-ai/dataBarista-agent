@@ -110,10 +110,6 @@ const telegramMessageHandlerTemplate =
     // {{goals}}
     `
 
-{{actionExamples}}
-(Action examples are for reference only. Do not use the information from them in your response.)
-
-
 # Knowledge
 {{knowledge}}
 
