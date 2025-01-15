@@ -6,6 +6,7 @@ import { AutoClientInterface } from "@elizaos/client-auto";
 //import { LensAgentClient } from "@elizaos/client-lens";
 //import { SlackClientInterface } from "@elizaos/client-slack";
 import { TelegramClientInterface } from "@elizaos/client-telegram";
+import { DkgPlugin } from "@elizaos/plugin-dkg";
 //import { TwitterClientInterface } from "@elizaos/client-twitter";
 import {
     AgentRuntime,
@@ -525,7 +526,7 @@ export async function createAgent(
         evaluators: [],
         character,
         // character.plugins are handled when clients are added
-        plugins: [matchmakerPlugin, nodePlugin].filter(Boolean),
+        plugins: [matchmakerPlugin, nodePlugin, dkgPlugin].filter(Boolean),
         providers: [],
         actions: [],
         services: [],

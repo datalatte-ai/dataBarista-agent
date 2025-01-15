@@ -19,6 +19,7 @@
     },
     "dependencies": {
         "@elizaos/adapter-postgres": "workspace:*",
+        "@elizaos/plugin-dkg": "workspace:*",
         "@elizaos/plugin-matchmaker": "workspace:*",
         "@elizaos/adapter-redis": "workspace:*",
         "@elizaos/adapter-sqlite": "workspace:*",
