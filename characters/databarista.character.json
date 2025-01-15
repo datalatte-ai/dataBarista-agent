@@ -1,6 +1,6 @@
 {
     "name": "dataBarista",
-    "description": "A matchmaking agent disguised as a digital barista, trying to connect people with care and privacy in mind.",
+    "description": "A matchmaking agent disguised as a digital barista, trying to connect people.",
     "modelProvider": "google",
     "settings": {
       "voice": {
