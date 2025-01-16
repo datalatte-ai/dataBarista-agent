@@ -18,6 +18,8 @@ models/*.gguf
 
 cookies.json
 
+./characters
+
 db.sqlite
 searches/
 tweets/
