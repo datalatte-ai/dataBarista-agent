@@ -104,13 +104,13 @@ export async function postTweet(
 }
 
 const DkgClient = new DKG({
-    environment: process.env.ENVIRONMENT,
+    environment: process.env.OT_ENVIRONMENT,
     endpoint: process.env.OT_NODE_HOSTNAME,
     port: process.env.OT_NODE_PORT,
     blockchain: {
-        name: process.env.BLOCKCHAIN_NAME,
-        publicKey: process.env.PUBLIC_KEY,
-        privateKey: process.env.PRIVATE_KEY,
+        name: process.env.OT_BLOCKCHAIN_NAME,
+        publicKey: process.env.OT_PUBLIC_KEY,
+        privateKey: process.env.OT_PRIVATE_KEY,
     },
     maxNumberOfRetries: 300,
     frequency: 2,
@@ -164,14 +164,14 @@ async function constructKnowledgeAsset(
 }
 
 export const dkgInsert: Action = {
-    name: "NONE",
+    name: "DKG_INSERT",
     similes: [
-        "NO_ACTION",
-        "NO_RESPONSE",
-        "NO_REACTION",
-        "RESPONSE",
-        "REPLY",
-        "DEFAULT",
+        "STORE_MEMORY",
+        "SAVE_KNOWLEDGE",
+        "RECORD_INSIGHT",
+        "ARCHIVE_DATA",
+        "PERSIST_FACT",
+        "MEMORIZE",
     ],
     validate: async (_runtime: IAgentRuntime, _message: Memory) => {
         return true;
@@ -269,7 +269,7 @@ export const dkgInsert: Action = {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "execute action DKG_INSERT",
+                    text: "store in dkg",
                     action: "DKG_INSERT",
                 },
             },
