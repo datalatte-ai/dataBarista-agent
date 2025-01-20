@@ -19,6 +19,7 @@ models/*.gguf
 cookies.json
 
 characters/
+/characters/*
 
 db.sqlite
 searches/
