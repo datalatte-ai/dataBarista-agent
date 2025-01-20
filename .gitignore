@@ -19,6 +19,9 @@ models/*.gguf
 cookies.json
 
 characters/
+/characters/databarista.character_withExample.json
+/characters/databarista.character.json
+/characters/databarista2.character.json
 
 db.sqlite
 searches/

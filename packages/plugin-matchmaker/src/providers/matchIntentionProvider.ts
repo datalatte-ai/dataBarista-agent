@@ -5,11 +5,11 @@ import { REQUIRED_FIELDS } from "../constants";
 const matchIntentionProvider: Provider = {
     get: async (runtime: IAgentRuntime, message: Memory, state?: State) => {
         try {
-            const username = state?.senderName || message.userId;
+            const username = state?.senderName;
             const cacheKey = `${runtime.character.name}/${username}/data`;
 
             const cached = await runtime.cacheManager.get<MatchIntentionCache>(cacheKey);
-
+            
             if (!cached?.data) {
                 return `
 No networking profile found for @${username}.

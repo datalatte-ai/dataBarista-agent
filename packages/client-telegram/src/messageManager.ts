@@ -123,7 +123,7 @@ const telegramMessageHandlerTemplate =
 
 {{attachments}}
 
-{{actions}}SERENDIPITY: Call this action when user has completed their profile and is searching for a match.
+{{actions}}
 
 {{messageDirections}}
 

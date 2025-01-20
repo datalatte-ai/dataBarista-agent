@@ -71,11 +71,34 @@ export const dkgMemoryTemplate = {
     ],
     url: "https://twitter.com/JohnDoe/status/1234567890",
 };
-// associatedMedia: { can be twt image
-//   "@type": "MediaObject",
-//   contentUrl: "https://example.com/user-query-audio.mp3",
-//   encodingFormat: "audio/mpeg",
-// },
+
+export const networkingPreferencesTemplate = {
+    "@context": "http://schema.org",
+    "@type": "Person",
+    "@id": "uuid:<username>",
+    identifier: "<username>",
+    seeks: {
+        "@type": "Demand",
+        description: "<networking goal>",
+        about: [
+            {
+                "@type": "Thing",
+                "@id": "uuid:<industry>",
+                name: "<industry name>"
+            }
+            // Additional industry preferences
+        ]
+    },
+    dateCreated: "yyyy-mm-ddTHH:mm:ssZ",
+    keywords: [
+        {
+            "@type": "Text",
+            "@id": "uuid:<keyword>",
+            name: "<keyword>"
+        }
+        // Additional keywords
+    ]
+};
 
 export const combinedSparqlExample = `
 SELECT DISTINCT ?headline ?articleBody

@@ -18,8 +18,7 @@ import {
     DKG_EXPLORER_LINKS,
     ACTIONS,
 } from "../constants.ts";
-// @ts-ignore
-import DKG from "dkg.js";
+import { DkgClient } from "../client.ts";
 import { sendNotification } from "../http-helper.ts";
 import { Scraper } from "agent-twitter-client";
 
@@ -102,21 +101,6 @@ export async function postTweet(
         return false;
     }
 }
-
-const DkgClient = new DKG({
-    environment: process.env.OT_ENVIRONMENT,
-    endpoint: process.env.OT_NODE_HOSTNAME,
-    port: process.env.OT_NODE_PORT,
-    blockchain: {
-        name: process.env.OT_BLOCKCHAIN_NAME,
-        publicKey: process.env.OT_PUBLIC_KEY,
-        privateKey: process.env.OT_PRIVATE_KEY,
-    },
-    maxNumberOfRetries: 300,
-    frequency: 2,
-    contentType: "all",
-    nodeApiVersion: "/v1",
-});
 
 async function constructKnowledgeAsset(
     runtime: IAgentRuntime,
