@@ -2,6 +2,7 @@ import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, Stat
 import { composeContext } from "@elizaos/core";
 import { UserProfile, UserProfileCache } from "../types";
 import { REQUIRED_FIELDS, NETWORKING_PURPOSES, RELATIONSHIP_TYPES, EXPERIENCE_LEVELS, COMPANY_STAGES } from "../constants";
+import { checkFields } from "../utils/validation";
 
 const extractionTemplate = `
 TASK: Extract comprehensive professional information from the conversation.
@@ -231,6 +232,18 @@ export const userProfileEvaluator: Evaluator = {
                 newData.completed = true;
             }
 
+            // Add debug logging
+            elizaLogger.info("Profile Completion Status:", {
+                username,
+                isComplete,
+                completed: newData.completed,
+                checkResults: {
+                    professional: checkFields(newData.professionalContext, REQUIRED_FIELDS.professionalContext),
+                    goals: checkFields(newData.goalsObjectives, REQUIRED_FIELDS.goalsObjectives),
+                    preferences: checkFields(newData.preferencesRequirements, REQUIRED_FIELDS.preferencesRequirements)
+                }
+            });
+
             elizaLogger.info("Final Result:", {
                 username,
                 isComplete,
@@ -294,18 +307,47 @@ function mergeWithConfidence<T extends { confidence: Record<string, number> }>(c
 }
 
 function checkCompletion(data: UserProfile): boolean {
-    // Check if all required fields are present with confidence > 0.7
-    const checkFields = (obj: any, fields: readonly string[]): boolean => {
-        return fields.every(field => {
-            const value = obj[field];
-            const confidence = obj.confidence[field] || 0;
-            return value && confidence > 0.7;
-        });
-    };
+    // Add debug logging
+    elizaLogger.info("Checking Profile Completion:", {
+        professionalContext: data.professionalContext,
+        goalsObjectives: data.goalsObjectives,
+        preferencesRequirements: data.preferencesRequirements
+    });
 
-    return (
-        checkFields(data.professionalContext, REQUIRED_FIELDS.professionalContext) &&
-        checkFields(data.goalsObjectives, REQUIRED_FIELDS.goalsObjectives) &&
-        checkFields(data.preferencesRequirements, REQUIRED_FIELDS.preferencesRequirements)
-    );
+    // Simply check if there are any missing fields
+    const missingFields = formatMissingFields(data);
+    const isComplete = missingFields.length === 0;
+
+    elizaLogger.info("Profile Completion Result:", {
+        isComplete,
+        missingFields
+    });
+    return isComplete;
+}
+
+function formatMissingFields(data: UserProfile): string[] {
+    const missing: string[] = [];
+
+    // Check professional context
+    REQUIRED_FIELDS.professionalContext.forEach(field => {
+        if (!data.professionalContext?.[field]) {
+            missing.push(`professional ${field}`);
+        }
+    });
+
+    // Check goals and objectives
+    REQUIRED_FIELDS.goalsObjectives.forEach(field => {
+        if (!data.goalsObjectives?.[field]) {
+            missing.push(`goals ${field}`);
+        }
+    });
+
+    // Check preferences and requirements
+    REQUIRED_FIELDS.preferencesRequirements.forEach(field => {
+        if (!data.preferencesRequirements?.[field]) {
+            missing.push(`preferences ${field}`);
+        }
+    });
+
+    return missing;
 }

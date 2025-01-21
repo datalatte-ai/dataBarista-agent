@@ -20,6 +20,7 @@ import {
     MatchRecord
 } from "../types";
 import { REQUIRED_FIELDS, NETWORKING_PURPOSES, RELATIONSHIP_TYPES, EXPERIENCE_LEVELS, COMPANY_STAGES } from "../constants";
+import { checkFields } from "../utils/validation";
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -43,12 +44,55 @@ export const serendipityAction: Action = {
             const userCacheKey = `${runtime.character.name}/${username}/data`;
             const userProfileCache = await runtime.cacheManager.get<UserProfileCache>(userCacheKey);
 
-            // Only proceed if user has completed their profile
-            if (!userProfileCache?.data?.completed) {
+            // Add debug logging
+            elizaLogger.info("Serendipity Validation Check:", {
+                username,
+                hasCache: !!userProfileCache,
+                profileData: userProfileCache?.data
+            });
+
+            // Check if profile exists
+            if (!userProfileCache?.data) {
+                elizaLogger.warn(`No profile found for user ${username}`);
                 return false;
             }
 
-            // No need to check pool since we'll directly compare with other completed profiles
+            const data = userProfileCache.data;
+
+            // Check minimum required fields for matchmaking
+            const hasMinimumFields =
+                // Professional Context: at least role and experience level
+                data.professionalContext?.role &&
+                data.professionalContext?.experienceLevel &&
+                // Goals: at least primary purpose and relationship type
+                data.goalsObjectives?.primaryPurpose &&
+                data.goalsObjectives?.relationshipType?.length > 0 &&
+                // Preferences: at least industry focus or required expertise
+                (data.preferencesRequirements?.industryFocus?.length > 0 ||
+                 data.preferencesRequirements?.requiredExpertise?.length > 0);
+
+            elizaLogger.info("Profile validation result:", {
+                username,
+                hasMinimumFields,
+                professionalContext: {
+                    hasRole: !!data.professionalContext?.role,
+                    hasExperience: !!data.professionalContext?.experienceLevel
+                },
+                goals: {
+                    hasPurpose: !!data.goalsObjectives?.primaryPurpose,
+                    hasRelationType: (data.goalsObjectives?.relationshipType?.length || 0) > 0
+                },
+                preferences: {
+                    hasIndustryFocus: (data.preferencesRequirements?.industryFocus?.length || 0) > 0,
+                    hasExpertise: (data.preferencesRequirements?.requiredExpertise?.length || 0) > 0
+                }
+            });
+
+            if (!hasMinimumFields) {
+                elizaLogger.warn(`User ${username} profile missing minimum required fields`);
+                return false;
+            }
+
             return true;
         } catch (error) {
             elizaLogger.error("Error in serendipity validate:", error);
@@ -66,8 +110,26 @@ export const serendipityAction: Action = {
             const userCacheKey = `${runtime.character.name}/${username}/data`;
             const userProfileCache = await runtime.cacheManager.get<UserProfileCache>(userCacheKey);
 
-            if (!userProfileCache?.data?.completed) {
-                elizaLogger.warn(`User ${username} has incomplete profile - skipping matchmaking`);
+            if (!userProfileCache?.data) {
+                elizaLogger.warn(`No profile found for user ${username}`);
+                return;
+            }
+
+            const data = userProfileCache.data;
+            // Check minimum required fields for matchmaking
+            const hasMinimumFields =
+                // Professional Context: at least role and experience level
+                data.professionalContext?.role &&
+                data.professionalContext?.experienceLevel &&
+                // Goals: at least primary purpose and relationship type
+                data.goalsObjectives?.primaryPurpose &&
+                data.goalsObjectives?.relationshipType?.length > 0 &&
+                // Preferences: at least industry focus or required expertise
+                (data.preferencesRequirements?.industryFocus?.length > 0 ||
+                 data.preferencesRequirements?.requiredExpertise?.length > 0);
+
+            if (!hasMinimumFields) {
+                elizaLogger.warn(`User ${username} profile missing minimum required fields - skipping matchmaking`);
                 return;
             }
 
@@ -89,6 +151,12 @@ export const serendipityAction: Action = {
 
             // Get existing match pool
             const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool");
+            elizaLogger.info("Cache details:", {
+                cacheType: runtime.cacheManager.constructor.name,
+                poolCache: poolCache,
+                poolSize: poolCache?.pools?.length || 0,
+                currentUser: currentUser
+            });
             const matchPool = poolCache?.pools || [];
 
             elizaLogger.info(`Found ${matchPool.length} potential candidates in match pool`);
@@ -112,15 +180,31 @@ export const serendipityAction: Action = {
             // Find potential matches among users with completed profiles
             for (const potentialMatch of matchPool) {
                 // Skip self-matching
-                if (potentialMatch.userId === message.userId) continue;
-
-                // Skip if profile not completed
-                if (!potentialMatch.matchIntention?.completed) {
-                    elizaLogger.debug(`Skipping incomplete profile for user: ${potentialMatch.username}`);
+                if (potentialMatch.userId === message.userId) {
+                    elizaLogger.debug(`Skipping self-match for user: ${potentialMatch.username}`);
                     continue;
                 }
 
-                elizaLogger.info(`Evaluating potential match: ${potentialMatch.username}`);
+                // Check minimum fields for potential match
+                const matchData = potentialMatch.matchIntention;
+                const matchHasMinimumFields =
+                    matchData.professionalContext?.role &&
+                    matchData.professionalContext?.experienceLevel &&
+                    matchData.goalsObjectives?.primaryPurpose &&
+                    matchData.goalsObjectives?.relationshipType?.length > 0 &&
+                    (matchData.preferencesRequirements?.industryFocus?.length > 0 ||
+                     matchData.preferencesRequirements?.requiredExpertise?.length > 0);
+
+                if (!matchHasMinimumFields) {
+                    elizaLogger.debug(`Skipping incomplete profile for user: ${potentialMatch.username}`, {
+                        profile: matchData
+                    });
+                    continue;
+                }
+
+                elizaLogger.info(`Evaluating potential match: ${potentialMatch.username}`, {
+                    matchProfile: matchData
+                });
                 matchesEvaluated++;
 
                 const evaluationState = {
