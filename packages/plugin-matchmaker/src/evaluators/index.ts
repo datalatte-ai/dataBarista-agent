@@ -1,1 +1,1 @@
-export * from "./matchIntentionEvaluator.ts";
+export * from "./userProfileEvaluator.ts";

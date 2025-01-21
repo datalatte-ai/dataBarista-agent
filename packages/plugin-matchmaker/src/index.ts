@@ -3,8 +3,8 @@ import { serendipityAction } from "./actions/serendipity.ts";
 import { continueAction } from "./actions/continue.ts";
 import { ignoreAction } from "./actions/ignore.ts";
 import { noneAction } from "./actions/none.ts";
-import { matchIntentionEvaluator } from "./evaluators/matchIntentionEvaluator.ts";
-import { matchIntentionProvider } from "./providers/matchIntentionProvider.ts";
+import { userProfileEvaluator } from "./evaluators/userProfileEvaluator.ts";
+import { userProfileStatusProvider } from "./providers/userProfileStatusProvider.ts";
 //import { matchPoolProvider } from "./providers/matchPoolProvider.ts";
 
 export * as actions from "./actions";
@@ -20,6 +20,6 @@ export const matchmakerPlugin: Plugin = {
         ignoreAction,
         noneAction,
     ],
-    evaluators: [matchIntentionEvaluator],
-    providers: [matchIntentionProvider],
+    evaluators: [userProfileEvaluator],
+    providers: [userProfileStatusProvider],
 };

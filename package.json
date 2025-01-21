@@ -22,7 +22,9 @@
         "docker": "pnpm docker:build && pnpm docker:run && pnpm docker:bash",
         "test": "bash ./scripts/test.sh",
         "smokeTests": "bash ./scripts/smokeTests.sh",
-        "integrationTests": "bash ./scripts/integrationTests.sh"
+        "integrationTests": "bash ./scripts/integrationTests.sh",
+        "seed": "cd agent && node --loader ts-node/esm data/seedMatchPool.ts",
+        "start-with-seed": "pnpm run seed && pnpm start -- --characters=\"./characters/databaristaEvents.character.json\""
     },
     "devDependencies": {
         "@commitlint/cli": "18.6.1",

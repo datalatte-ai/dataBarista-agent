@@ -359,7 +359,7 @@ export function getTokenForProvider(
     }
 }
 
-function initializeDatabase(dataDir: string) {
+async function initializeDatabase(dataDir: string) {
     if (process.env.POSTGRES_URL) {
         elizaLogger.info("Initializing PostgreSQL connection...");
         const db = new PostgresDatabaseAdapter({
@@ -367,24 +367,33 @@ function initializeDatabase(dataDir: string) {
             parseInputs: true,
         });
 
-        // Test the connection
-        db.init()
-            .then(() => {
-                elizaLogger.success(
-                    "Successfully connected to PostgreSQL database"
-                );
-            })
-            .catch((error) => {
-                elizaLogger.error("Failed to connect to PostgreSQL:", error);
-            });
-
-        return db;
+        try {
+            await db.init();
+            elizaLogger.success("Successfully connected to PostgreSQL database");
+            return db;
+        } catch (error) {
+            elizaLogger.error("Failed to connect to PostgreSQL:", error);
+            throw error;
+        }
     } else {
         const filePath =
             process.env.SQLITE_FILE ?? path.resolve(dataDir, "db.sqlite");
-        // ":memory:";
+
+        // Ensure the database directory exists
+        const dbDir = path.dirname(filePath);
+        await fs.promises.mkdir(dbDir, { recursive: true });
+
+        elizaLogger.info("Initializing SQLite database at:", filePath);
         const db = new SqliteDatabaseAdapter(new Database(filePath));
-        return db;
+
+        try {
+            await db.init();
+            elizaLogger.success("Successfully initialized SQLite database");
+            return db;
+        } catch (error) {
+            elizaLogger.error("Failed to initialize SQLite database:", error);
+            throw error;
+        }
     }
 }
 
@@ -603,10 +612,8 @@ async function startAgent(
             fs.mkdirSync(dataDir, { recursive: true });
         }
 
-        db = initializeDatabase(dataDir) as IDatabaseAdapter &
+        db = await initializeDatabase(dataDir) as IDatabaseAdapter &
             IDatabaseCacheAdapter;
-
-        await db.init();
 
         const cache = initializeCache(
             process.env.CACHE_STORE ?? CacheStore.DATABASE,

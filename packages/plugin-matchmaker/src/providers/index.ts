@@ -1,2 +1,2 @@
-export * from "./matchIntentionProvider.ts";
+export * from "./userProfileStatusProvider.ts";
 //export * from "./matchPoolProvider.ts";
