@@ -4,5 +4,6 @@
 .env
 *.env
 .env*
-/data
+/data/*
+!/data/simulateConversations.ts
 /generatedImages
