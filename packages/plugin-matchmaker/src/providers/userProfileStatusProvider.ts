@@ -7,21 +7,21 @@ function formatMissingFields(data: UserProfile): string[] {
 
     // Check professional context
     REQUIRED_FIELDS.professionalContext.forEach(field => {
-        if (!data.professionalContext?.[field]) {
+        if (typeof field === 'string' && !data.professionalContext?.[field]) {
             missing.push(`professional ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
         }
     });
 
     // Check goals and objectives
     REQUIRED_FIELDS.goalsObjectives.forEach(field => {
-        if (!data.goalsObjectives?.[field]) {
+        if (typeof field === 'string' && !data.goalsObjectives?.[field]) {
             missing.push(`goals ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
         }
     });
 
     // Check preferences and requirements
     REQUIRED_FIELDS.preferencesRequirements.forEach(field => {
-        if (!data.preferencesRequirements?.[field]) {
+        if (typeof field === 'string' && !data.preferencesRequirements?.[field]) {
             missing.push(`preferences ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
         }
     });

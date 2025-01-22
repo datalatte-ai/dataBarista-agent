@@ -1,17 +1,12 @@
 export const REQUIRED_FIELDS = {
-    professionalContext: [
-        "role",
-        "industry",
-        "experienceLevel"
-    ],
+    professionalContext: [] as string[],
     goalsObjectives: [
         "primaryPurpose",
         "relationshipType"
-    ],
+    ] as string[],
     preferencesRequirements: [
-        "counterpartProfiles",
         "industryFocus"
-    ]
+    ] as string[]
 } as const;
 
 export const NETWORKING_PURPOSES = [
