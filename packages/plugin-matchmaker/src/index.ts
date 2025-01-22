@@ -5,7 +5,6 @@ import { ignoreAction } from "./actions/ignore.ts";
 import { noneAction } from "./actions/none.ts";
 import { userProfileEvaluator } from "./evaluators/userProfileEvaluator.ts";
 import { userProfileStatusProvider } from "./providers/userProfileStatusProvider.ts";
-//import { matchPoolProvider } from "./providers/matchPoolProvider.ts";
 
 export * as actions from "./actions";
 export * as evaluators from "./evaluators";

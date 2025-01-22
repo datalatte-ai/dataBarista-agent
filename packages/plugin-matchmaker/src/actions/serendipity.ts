@@ -226,21 +226,32 @@ Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', '
 Looking for: ${potentialMatch.matchIntention.goalsObjectives.relationshipType?.join(', ')}
 Industry focus: ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(', ')}
 
-Format the response as an array of objects with the following structure:
+IMPORTANT: Return a JSON array containing EXACTLY ONE object with this structure:
 [{
-    "isMatch": boolean,
-    "matchScore": number,
-    "reasons": ["reason1", "reason2"]
+    "isMatch": boolean,      // true if users are a good match
+    "matchScore": number,    // 0.0 to 1.0 score indicating match quality
+    "reasons": string[]      // List of reasons why they match or don't match
 }]
 
-Consider:
+Example response:
+[{
+    "isMatch": true,
+    "matchScore": 0.8,
+    "reasons": [
+        "Both focused on B2B SaaS industry",
+        "Complementary expertise in AI and business development",
+        "Aligned goals for strategic partnership"
+    ]
+}]
+
+Consider these factors when evaluating:
 1. Industry alignment
 2. Complementary expertise
 3. Mutual goals
 4. Relationship type compatibility
 5. Experience level compatibility
 
-Return an empty array if you cannot make a determination.`;
+Return an empty array [] ONLY if you cannot make a determination.`;
 }
 
 async function evaluateMatch(

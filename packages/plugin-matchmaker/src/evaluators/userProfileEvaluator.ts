@@ -1,6 +1,6 @@
 import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, State, elizaLogger } from "@elizaos/core";
 import { composeContext } from "@elizaos/core";
-import { UserProfile, UserProfileCache } from "../types";
+import { UserProfile, UserProfileCache, MatchPool, MatchPoolCache } from "../types";
 import { REQUIRED_FIELDS, NETWORKING_PURPOSES, RELATIONSHIP_TYPES, EXPERIENCE_LEVELS, COMPANY_STAGES } from "../constants";
 import { checkFields } from "../utils/validation";
 
@@ -258,6 +258,35 @@ export const userProfileEvaluator: Evaluator = {
             };
 
             await runtime.cacheManager.set(cacheKey, cacheData);
+
+            // If profile is complete, add/update in match pool
+            if (newData.completed) {
+                const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool") || { pools: [], lastUpdated: 0 };
+
+                const matchPoolEntry: MatchPool = {
+                    userId: message.userId,
+                    username: username,
+                    lastActive: Date.now(),
+                    matchIntention: newData
+                };
+
+                // Update existing entry or add new one
+                const existingIndex = poolCache.pools.findIndex(p => p.userId === message.userId);
+                if (existingIndex >= 0) {
+                    poolCache.pools[existingIndex] = matchPoolEntry;
+                } else {
+                    poolCache.pools.push(matchPoolEntry);
+                }
+
+                poolCache.lastUpdated = Date.now();
+                await runtime.cacheManager.set("matchmaker/pool", poolCache);
+
+                elizaLogger.info("Updated match pool:", {
+                    username,
+                    poolSize: poolCache.pools.length,
+                    action: existingIndex >= 0 ? 'updated' : 'added'
+                });
+            }
 
             return true;
         } catch (error) {
