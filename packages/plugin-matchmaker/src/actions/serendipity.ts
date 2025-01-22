@@ -231,145 +231,231 @@ export const serendipityAction: Action = {
                 };
 
                 const matchEvaluationTemplate = `
-TASK: Evaluate if these users would be a good professional networking match.
+TASK: Extract match compatibility information and return a structured assessment.
 
-Current User:
-Username: ${evaluationState.currentProfile.username}
-Professional Context:
+Input Profiles:
+Profile 1: ${evaluationState.currentProfile.username}
 - Role: ${evaluationState.currentProfile.matchIntention.professionalContext.role}
 - Industry: ${evaluationState.currentProfile.matchIntention.professionalContext.industry}
-- Experience: ${evaluationState.currentProfile.matchIntention.professionalContext.experienceLevel}
-- Company Stage: ${evaluationState.currentProfile.matchIntention.professionalContext.companyStage}
-- Location: ${evaluationState.currentProfile.matchIntention.professionalContext.location}
-- Expertise: ${evaluationState.currentProfile.matchIntention.professionalContext.expertise?.join(", ")}
+- Goals: ${evaluationState.currentProfile.matchIntention.goalsObjectives?.targetOutcomes?.join(", ")}
 
-Goals & Objectives:
-- Primary Purpose: ${evaluationState.currentProfile.matchIntention.goalsObjectives.primaryPurpose}
-- Target Outcomes: ${evaluationState.currentProfile.matchIntention.goalsObjectives.targetOutcomes?.join(", ")}
-- Relationship Type: ${evaluationState.currentProfile.matchIntention.goalsObjectives.relationshipType?.join(", ")}
-
-Preferences & Requirements:
-- Geographic Preferences: ${evaluationState.currentProfile.matchIntention.preferencesRequirements.geographicPreferences?.join(", ")}
-- Industry Focus: ${evaluationState.currentProfile.matchIntention.preferencesRequirements.industryFocus?.join(", ")}
-- Stage Preferences: ${evaluationState.currentProfile.matchIntention.preferencesRequirements.stagePreferences?.join(", ")}
-- Required Expertise: ${evaluationState.currentProfile.matchIntention.preferencesRequirements.requiredExpertise?.join(", ")}
-
-Potential Match:
-Username: ${evaluationState.potentialMatch.username}
-Professional Context:
+Profile 2: ${evaluationState.potentialMatch.username}
 - Role: ${evaluationState.potentialMatch.matchIntention.professionalContext.role}
 - Industry: ${evaluationState.potentialMatch.matchIntention.professionalContext.industry}
-- Experience: ${evaluationState.potentialMatch.matchIntention.professionalContext.experienceLevel}
-- Company Stage: ${evaluationState.potentialMatch.matchIntention.professionalContext.companyStage}
-- Location: ${evaluationState.potentialMatch.matchIntention.professionalContext.location}
-- Expertise: ${evaluationState.potentialMatch.matchIntention.professionalContext.expertise?.join(", ")}
+- Goals: ${evaluationState.potentialMatch.matchIntention.goalsObjectives?.targetOutcomes?.join(", ")}
 
-Goals & Objectives:
-- Primary Purpose: ${evaluationState.potentialMatch.matchIntention.goalsObjectives.primaryPurpose}
-- Target Outcomes: ${evaluationState.potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(", ")}
-- Relationship Type: ${evaluationState.potentialMatch.matchIntention.goalsObjectives.relationshipType?.join(", ")}
-
-Preferences & Requirements:
-- Geographic Preferences: ${evaluationState.potentialMatch.matchIntention.preferencesRequirements.geographicPreferences?.join(", ")}
-- Industry Focus: ${evaluationState.potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(", ")}
-- Stage Preferences: ${evaluationState.potentialMatch.matchIntention.preferencesRequirements.stagePreferences?.join(", ")}
-- Required Expertise: ${evaluationState.potentialMatch.matchIntention.preferencesRequirements.requiredExpertise?.join(", ")}
-
-Format the response as an array of objects with the following structure:
+Return an array containing exactly one match evaluation object with the following structure:
 [{
-    "isMatch": boolean,
-    "matchScore": number,
-    "reasons": string[],
-    "complementaryFactors": string[],
-    "potentialSynergies": string[]
+    "isMatch": boolean,      // true or false
+    "matchScore": number,    // between 0.0 and 1.0
+    "reasons": [
+        string,             // at least one reason required
+        string              // additional reasons optional
+    ],
+    "complementaryFactors": [
+        string,             // at least one factor required
+        string              // additional factors optional
+    ],
+    "potentialSynergies": [
+        string,             // at least one synergy required
+        string              // additional synergies optional
+    ]
 }]
 
-Consider:
-1. Professional Context Alignment
-   - Industry overlap
-   - Experience level compatibility
-   - Geographic feasibility
-   - Expertise complementarity
+IMPORTANT:
+1. Return ONLY the JSON array
+2. Use proper JSON syntax with double quotes for strings
+3. Include commas between array elements
+4. Do not include trailing commas
+5. Do not include any text before or after the JSON array
+6. Ensure all fields are present and properly typed
 
-2. Goals & Objectives Alignment
-   - Matching networking purposes
-   - Compatible relationship types
-   - Aligned timelines and scale
-   - Mutual benefit potential
-
-3. Preferences & Requirements Match
-   - Geographic preferences alignment
-   - Industry focus overlap
-   - Stage preferences compatibility
-   - Required expertise match
-
-Calculate matchScore (0.0-1.0) based on:
-- High impact matches (0.8-1.0): Perfect alignment in key areas
-- Good matches (0.6-0.8): Strong alignment with minor differences
-- Moderate matches (0.4-0.6): Some alignment with complementary factors
-- Low matches (<0.4): Minimal alignment
-
-Return an empty array if you cannot make a determination.
-`;
+Example of valid response:
+[{
+    "isMatch": true,
+    "matchScore": 0.85,
+    "reasons": [
+        "Strong alignment in event technology",
+        "Complementary expertise in AI and events"
+    ],
+    "complementaryFactors": [
+        "Technical expertise meets industry experience",
+        "Product development meets market access"
+    ],
+    "potentialSynergies": [
+        "Joint development of AI-powered event solutions",
+        "Access to enterprise event market"
+    ]
+}]`;
 
                 const context = composeContext({
                     template: matchEvaluationTemplate,
                     state: evaluationState
                 });
 
-                const results = await generateObjectArray({
-                    runtime,
-                    context,
-                    modelClass: ModelClass.LARGE
-                });
+                // Add retry limit and tracking
+                let retryCount = 0;
+                const MAX_RETRIES = 2;
 
-                if (results?.[0]?.isMatch) {
-                    elizaLogger.info(`Match found with ${potentialMatch.username}:`, {
-                        score: results[0].matchScore,
-                        reasons: results[0].reasons
-                    });
+                while (retryCount <= MAX_RETRIES) {
+                    try {
+                        elizaLogger.info("Sending match evaluation request to model...");
 
-                    if (results[0].matchScore >= 0.6) {
-                        highQualityMatches++;
-                        elizaLogger.info(`High quality match (${results[0].matchScore}) with ${potentialMatch.username}`);
-
-                        // Store the match data
-                        const matchCacheKey = `matchmaker/matches/${message.userId}`;
-                        const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
-
-                        const newMatch: MatchRecord = {
-                            userId: potentialMatch.userId,
-                            username: potentialMatch.username,
-                            matchedAt: Date.now(),
-                            matchScore: results[0].matchScore,
-                            reasons: results[0].reasons,
-                            complementaryFactors: results[0].complementaryFactors,
-                            potentialSynergies: results[0].potentialSynergies,
-                            status: 'pending'
-                        };
-
-                        await runtime.cacheManager.set(matchCacheKey, {
-                            matches: [...existingMatches.matches, newMatch],
-                            lastUpdated: Date.now()
+                        const results = await generateObjectArray({
+                            runtime,
+                            context,
+                            modelClass: ModelClass.LARGE
                         });
 
-                        // Format match notification
-                        const matchDescription = formatMatchDescription(potentialMatch, results[0]);
+                        // Log raw model response
+                        elizaLogger.info("Raw model response:", {
+                            results: results ? JSON.stringify(results, null, 2) : "null",
+                            type: typeof results
+                        });
 
-                        const response: Content = {
-                            text: matchDescription,
-                            action: "SERENDIPITY"
+                        // Validate the results format
+                        if (!results?.length || !Array.isArray(results)) {
+                            elizaLogger.error("Invalid results format:", {
+                                results: results,
+                                type: typeof results,
+                                isArray: Array.isArray(results),
+                                length: results?.length
+                            });
+                            retryCount++;
+                            continue;
+                        }
+
+                        const matchResult = results[0];
+                        elizaLogger.info("Processing match result:", {
+                            matchResult: JSON.stringify(matchResult, null, 2)
+                        });
+
+                        // Validate object structure
+                        if (!matchResult || typeof matchResult !== 'object') {
+                            elizaLogger.error(`Invalid match result format - not an object (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+                            retryCount++;
+                            continue;
+                        }
+
+                        // Validate all required fields exist and have correct types
+                        const requiredFields = {
+                            isMatch: 'boolean',
+                            matchScore: 'number',
+                            reasons: 'array',
+                            complementaryFactors: 'array',
+                            potentialSynergies: 'array'
                         };
 
-                        elizaLogger.info("=== Serendipity Matchmaking Complete ===");
-                        elizaLogger.info(`Summary: Evaluated ${matchesEvaluated} candidates, found ${highQualityMatches} high quality matches`);
+                        const isValid = Object.entries(requiredFields).every(([field, type]) => {
+                            const value = matchResult[field];
+                            const actualType = Array.isArray(value) ? 'array' : typeof value;
+                            if (actualType !== type) {
+                                elizaLogger.warn(`Invalid type for ${field}: expected ${type}, got ${actualType}`);
+                                return false;
+                            }
+                            if (type === 'array' && !value.length) {
+                                elizaLogger.warn(`Empty array not allowed for ${field}`);
+                                return false;
+                            }
+                            return true;
+                        });
 
-                        return response;
-                    } else {
-                        elizaLogger.debug(`Match score too low (${results[0].matchScore}) with ${potentialMatch.username}`);
+                        if (!isValid) {
+                            retryCount++;
+                            continue;
+                        }
+
+                        // Validate matchScore range
+                        if (matchResult.matchScore < 0 || matchResult.matchScore > 1) {
+                            elizaLogger.warn(`Invalid match score - must be between 0 and 1: ${matchResult.matchScore} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+                            retryCount++;
+                            continue;
+                        }
+
+                        // If we get here, we have a valid result
+                        if (matchResult.isMatch) {
+                            elizaLogger.info("Valid match found:", {
+                                username: potentialMatch.username,
+                                score: matchResult.matchScore,
+                                reasons: matchResult.reasons,
+                                complementaryFactors: matchResult.complementaryFactors,
+                                potentialSynergies: matchResult.potentialSynergies
+                            });
+
+                            if (matchResult.matchScore >= 0.6) {
+                                highQualityMatches++;
+                                elizaLogger.info("High quality match found, preparing notification...");
+
+                                // Store match and prepare notification
+                                const matchCacheKey = `matchmaker/matches/${message.userId}`;
+                                const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
+
+                                const newMatch: MatchRecord = {
+                                    userId: potentialMatch.userId,
+                                    username: potentialMatch.username,
+                                    matchedAt: Date.now(),
+                                    matchScore: matchResult.matchScore,
+                                    reasons: matchResult.reasons,
+                                    complementaryFactors: matchResult.complementaryFactors,
+                                    potentialSynergies: matchResult.potentialSynergies,
+                                    status: 'pending'
+                                };
+
+                                elizaLogger.info("Storing match data:", { matchCacheKey, newMatch });
+
+                                await runtime.cacheManager.set(matchCacheKey, {
+                                    matches: [...existingMatches.matches, newMatch],
+                                    lastUpdated: Date.now()
+                                });
+
+                                const matchDescription = formatMatchDescription(potentialMatch, matchResult);
+                                elizaLogger.info("Match description prepared:", { matchDescription });
+
+                                elizaLogger.info("=== Serendipity Matchmaking Complete ===");
+                                elizaLogger.info(`Summary: Evaluated ${matchesEvaluated} candidates, found ${highQualityMatches} high quality matches`);
+
+                                // Return immediately with match notification
+                                return {
+                                    text: matchDescription,
+                                    action: "SERENDIPITY"
+                                };
+                            } else {
+                                elizaLogger.info("Match score too low:", {
+                                    username: potentialMatch.username,
+                                    score: matchResult.matchScore
+                                });
+                            }
+                        } else {
+                            elizaLogger.info("No match:", {
+                                username: potentialMatch.username,
+                                isMatch: matchResult.isMatch,
+                                score: matchResult.matchScore
+                            });
+                        }
+                        // Break retry loop on valid result
+                        break;
+
+                    } catch (error) {
+                        if (error instanceof SyntaxError && error.message.includes('JSON')) {
+                            elizaLogger.error("JSON parsing error in match evaluation:", {
+                                error: error.message,
+                                attempt: `${retryCount + 1}/${MAX_RETRIES + 1}`,
+                                stack: error.stack
+                            });
+                        } else {
+                            elizaLogger.error("Error in match evaluation:", {
+                                error: error.message,
+                                type: error.constructor.name,
+                                attempt: `${retryCount + 1}/${MAX_RETRIES + 1}`,
+                                stack: error.stack
+                            });
+                        }
+                        retryCount++;
+                        if (retryCount > MAX_RETRIES) {
+                            elizaLogger.error(`Max retries (${MAX_RETRIES + 1}) reached for ${potentialMatch.username}, moving to next candidate`);
+                            break;
+                        }
                     }
-                } else {
-                    elizaLogger.debug(`No match with ${potentialMatch.username}`);
                 }
             }
 

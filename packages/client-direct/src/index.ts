@@ -45,9 +45,7 @@ const upload = multer({ storage });
 
 export const messageHandlerTemplate =
     // {{goals}}
-    `# Action Examples
-{{actionExamples}}
-(Action examples are for reference only. Do not use the information from them in your response.)
+    `
 
 # Knowledge
 {{knowledge}}
@@ -61,14 +59,11 @@ About {{agentName}}:
 
 {{attachments}}
 
-# Capabilities
-Note that {{agentName}} is capable of reading/seeing/hearing various forms of media, including images, videos, audio, plaintext and PDFs. Recent attachments have been included above under the "Attachments" section.
-
 {{messageDirections}}
 
 {{recentMessages}}
 
-{{actions}}
+{{actions}}SERENDIPITY: Call this action when user has completed their profile and is searching for a match.
 
 # Instructions: Write the next message for {{agentName}}.
 ` + messageCompletionFooter;
@@ -289,7 +284,7 @@ export class DirectClient {
                     }
                 );
 
-                await runtime.evaluate(memory, state);
+                await runtime.evaluate(memory, state, true);
 
                 // Check if we should suppress the initial message
                 const action = runtime.actions.find(
@@ -536,7 +531,7 @@ export class DirectClient {
                     return;
                 }
 
-                await runtime.evaluate(memory, state);
+                await runtime.evaluate(memory, state, true);
 
                 const _result = await runtime.processActions(
                     memory,

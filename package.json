@@ -24,6 +24,7 @@
         "smokeTests": "bash ./scripts/smokeTests.sh",
         "integrationTests": "bash ./scripts/integrationTests.sh",
         "seed": "cd agent && node --loader ts-node/esm data/seedMatchPool.ts",
+        "simulate": "pnpm --filter \"@elizaos/agent\" simulate",
         "start-with-seed": "pnpm run seed && pnpm start -- --characters=\"./characters/databaristaEvents.character.json\""
     },
     "devDependencies": {

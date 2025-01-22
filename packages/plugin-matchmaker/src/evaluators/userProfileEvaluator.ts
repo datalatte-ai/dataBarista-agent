@@ -194,14 +194,14 @@ export const userProfileEvaluator: Evaluator = {
                 state: extractionState
             });
 
-            elizaLogger.info("=== UserProfileEvaluator Started ===");
-            elizaLogger.info("Input Context:", {
-                username,
-                recentMessages: state.recentMessages,
-                currentData: JSON.stringify(currentData, null, 2)
-            });
+            //elizaLogger.info("=== UserProfileEvaluator Started ===");
+            //elizaLogger.info("Input Context:", {
+            //    username,
+            //    recentMessages: state.recentMessages,
+            //    currentData: JSON.stringify(currentData, null, 2)
+            //});
 
-            elizaLogger.info("Composed Context:", context);
+            // elizaLogger.info("Composed Context:", context);
 
             const results = await generateObjectArray({
                 runtime,
@@ -215,7 +215,7 @@ export const userProfileEvaluator: Evaluator = {
             }
 
             const extractedData = results[0];
-            elizaLogger.info("Extracted Data:", JSON.stringify(extractedData, null, 2));
+            // elizaLogger.info("Extracted Data:", JSON.stringify(extractedData, null, 2));
 
             // Merge existing data with new data, preserving highest confidence values
             const newData: UserProfile = {
@@ -233,23 +233,23 @@ export const userProfileEvaluator: Evaluator = {
             }
 
             // Add debug logging
-            elizaLogger.info("Profile Completion Status:", {
-                username,
-                isComplete,
-                completed: newData.completed,
-                checkResults: {
-                    professional: checkFields(newData.professionalContext, REQUIRED_FIELDS.professionalContext),
-                    goals: checkFields(newData.goalsObjectives, REQUIRED_FIELDS.goalsObjectives),
-                    preferences: checkFields(newData.preferencesRequirements, REQUIRED_FIELDS.preferencesRequirements)
-                }
-            });
+            //elizaLogger.info("Profile Completion Status:", {
+            //    username,
+            //    isComplete,
+            //    completed: newData.completed,
+            //    checkResults: {
+            //        professional: checkFields(newData.professionalContext, REQUIRED_FIELDS.professionalContext),
+            //        goals: checkFields(newData.goalsObjectives, REQUIRED_FIELDS.goalsObjectives),
+            //        preferences: checkFields(newData.preferencesRequirements, REQUIRED_FIELDS.preferencesRequirements)
+            //    }
+            //});
 
-            elizaLogger.info("Final Result:", {
-                username,
-                isComplete,
-                data: JSON.stringify(newData, null, 2)
-            });
-            elizaLogger.info("=== UserProfileEvaluator Completed ===");
+            //elizaLogger.info("Final Result:", {
+            //    username,
+            //    isComplete,
+            //    data: JSON.stringify(newData, null, 2)
+            //});
+            //elizaLogger.info("=== UserProfileEvaluator Completed ===");
 
             // Store updated data in cache
             const cacheData: UserProfileCache = {
