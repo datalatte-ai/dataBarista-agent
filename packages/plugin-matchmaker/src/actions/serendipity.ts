@@ -205,41 +205,23 @@ async function getMatchPool(runtime: IAgentRuntime, currentUserId: string): Prom
 }
 
 function createMatchmakingTemplate(currentUser: UserProfile, potentialMatch: MatchPool): string {
-    return `
-TASK: Evaluate if these users would be a good professional networking match.
+    return `Evaluate match compatibility between two profiles:
 
-Current User:
-${formatProfileSummary(currentUser)}
+PROFILE 1:
+Role: ${currentUser.professionalContext.role}
+Industry: ${currentUser.professionalContext.industry}
+Goals: ${currentUser.goalsObjectives.targetOutcomes?.join(', ')}
 
-Potential Match:
-${formatProfileSummary(potentialMatch.matchIntention)}
+PROFILE 2:
+Role: ${potentialMatch.matchIntention.professionalContext.role}
+Industry: ${potentialMatch.matchIntention.professionalContext.industry}
+Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', ')}
 
-IMPORTANT - RESPONSE FORMAT REQUIREMENTS:
-1. Return ONLY a JSON array containing EXACTLY ONE object
-2. The response MUST be valid JSON - no extra text before or after
-3. The object MUST have these exact fields:
-   - "isMatch": boolean
-   - "matchScore": number between 0.0 and 1.0
-   - "reasons": array of strings
-
-Example of VALID response:
-[{
-    "isMatch": true,
-    "matchScore": 0.8,
-    "reasons": [
-        "Strong industry alignment in events technology",
-        "Complementary expertise in AI and event management",
-        "Mutual interest in business partnership"
-    ]
-}]
-
-Consider these factors:
-1. Industry alignment and complementary expertise
-2. Mutual goals and interests
-3. Relationship type compatibility
-4. Experience level compatibility
-
-Return ONLY the JSON array - no other text.`;
+Return a JSON array with one object: [{
+    "isMatch": true/false,
+    "matchScore": 0.0-1.0,
+    "reasons": ["reason1", "reason2", ...]
+}]`;
 }
 
 async function evaluateMatch(
