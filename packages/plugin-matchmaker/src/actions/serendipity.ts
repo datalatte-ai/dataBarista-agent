@@ -33,7 +33,38 @@ interface MatchEvaluation {
 }
 
 // Define the template at module level like userProfileEvaluator
-const matchEvaluationTemplate = `You are a JSON generator. Your task is to evaluate two profiles and return a match evaluation in EXACT JSON format.
+const matchEvaluationTemplate = `TASK: Evaluate compatibility between two professional profiles and return a match evaluation.
+
+# START OF EXAMPLES
+Example of expected output:
+\`\`\`json
+[
+  {
+    "isMatch": true,
+    "matchScore": 0.8,
+    "reasons": ["Aligned industry focus", "Complementary expertise", "Matching goals"]
+  }
+]
+\`\`\`
+
+Another example with no match:
+\`\`\`json
+[
+  {
+    "isMatch": false,
+    "matchScore": 0.2,
+    "reasons": ["Different industry focus", "Misaligned goals"]
+  }
+]
+\`\`\`
+# END OF EXAMPLES
+
+# EVALUATION CRITERIA
+Consider:
+- Industry alignment and potential synergies
+- Complementary expertise and resources
+- Matching or compatible goals
+- Potential for mutual benefit
 
 PROFILE 1:
 {{profile1}}
@@ -41,29 +72,16 @@ PROFILE 1:
 PROFILE 2:
 {{profile2}}
 
-STRICT RESPONSE RULES:
-1. Start with opening bracket [
-2. Add ONE object with opening brace {
-3. Add these EXACT fields:
-   - "isMatch": true or false (boolean)
-   - "matchScore": number between 0.0 and 1.0
-   - "reasons": array of strings
-4. Close the object with }
-5. Close the array with ]
-
-EXAMPLE VALID RESPONSE:
-[{"isMatch":true,"matchScore":0.8,"reasons":["Aligned industry focus","Complementary expertise","Matching goals"]}]
-
-YOUR RESPONSE MUST:
-- Be exactly one line
-- Have no spaces after commas
-- Have no spaces around colons
-- Have no line breaks
-- Have no comments
-- Have no trailing comma
-- Start with [ and end with ]
-
-RESPOND WITH JSON ONLY:`;
+Response should be a JSON array with exactly one object containing match evaluation results:
+\`\`\`json
+[
+  {
+    "isMatch": boolean,
+    "matchScore": number between 0.0 and 1.0,
+    "reasons": array of strings explaining the evaluation
+  }
+]
+\`\`\``;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -248,16 +266,16 @@ Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', '
     return composeContext({
         template: matchEvaluationTemplate,
         state: {
-            bio: "",
-            lore: "",
-            messageDirections: "",
-            postDirections: "",
-            recentMessages: "",
+                    bio: "",
+                    lore: "",
+                    messageDirections: "",
+                    postDirections: "",
+                    recentMessages: "",
             currentInfo: "",
             senderName: "",
             agentName: "",
-            actorsData: [],
-            recentMessagesData: [],
+                    actorsData: [],
+                    recentMessagesData: [],
             roomId: "00000000-0000-0000-0000-000000000000",
             actors: "",
             profile1,
@@ -289,10 +307,10 @@ async function evaluateMatch(
     elizaLogger.info("Generated match evaluation template:", { context });
 
     try {
-        const results = await generateObjectArray({
-            runtime,
-            context,
-            modelClass: ModelClass.LARGE // Using LARGE like userProfileEvaluator
+                        const results = await generateObjectArray({
+                            runtime,
+                            context,
+            modelClass: ModelClass.LARGE
         });
 
         if (!results?.length) {
@@ -310,41 +328,41 @@ async function evaluateMatch(
 
         if (result.isMatch && result.matchScore >= 0.1) {
             elizaLogger.info("Match criteria met", {
-                username: potentialMatch.username,
+                                username: potentialMatch.username,
                 score: result.matchScore
             });
 
             // Store the match data
             const matchCacheKey = `matchmaker/matches/${userId}`;
-            const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
+                                const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
 
             elizaLogger.info("Existing matches found:", {
                 count: existingMatches.matches.length,
                 matchCacheKey
             });
 
-            const newMatch: MatchRecord = {
-                userId: potentialMatch.userId,
-                username: potentialMatch.username,
-                matchedAt: Date.now(),
+                                const newMatch: MatchRecord = {
+                                    userId: potentialMatch.userId,
+                                    username: potentialMatch.username,
+                                    matchedAt: Date.now(),
                 matchScore: result.matchScore,
                 reasons: result.reasons,
                 complementaryFactors: ["Technical expertise complement", "Industry alignment"],
                 potentialSynergies: [],
-                status: 'pending'
-            };
+                                    status: 'pending'
+                                };
 
             elizaLogger.info("Storing new match:", { newMatch });
 
-            await runtime.cacheManager.set(matchCacheKey, {
-                matches: [...existingMatches.matches, newMatch],
-                lastUpdated: Date.now()
-            });
+                                await runtime.cacheManager.set(matchCacheKey, {
+                                    matches: [...existingMatches.matches, newMatch],
+                                    lastUpdated: Date.now()
+                                });
 
             elizaLogger.info("Match successfully stored");
 
             // Return detailed match notification
-            return {
+                                return {
                 text: `Great news! I found a match for you! @${potentialMatch.username} (${potentialMatch.matchIntention.professionalContext.role}) is interested in ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(", ")}.
 
 Their goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(", ")}
@@ -353,16 +371,16 @@ Why this is a great match:
 ${result.reasons.map(r => `• ${r}`).join('\n')}
 
 Would you like me to make an introduction?`,
-                action: "SERENDIPITY"
-            };
-        }
+                                    action: "SERENDIPITY"
+                                };
+                            }
 
         elizaLogger.info("Match criteria not met", {
-            username: potentialMatch.username,
+                                username: potentialMatch.username,
             score: result.matchScore
-        });
+                            });
         return null;
-    } catch (error) {
+                    } catch (error) {
         elizaLogger.error("Error in match evaluation:", error);
         return null;
     }
