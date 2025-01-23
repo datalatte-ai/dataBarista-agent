@@ -43,38 +43,27 @@ YOUR RESPONSE MUST:
 6. Have no comments
 7. Be on a single line`;
 
-const matchEvaluationTemplate = `# Task: Evaluate compatibility between two professional profiles and determine if they are a good match.
-
-# Context
-You are evaluating potential business/professional matches based on their profiles, goals, and industry alignment.
+const matchEvaluationTemplate = `# Task: Generate a JSON match evaluation for two professional profiles.
 
 # Profile Information
-Profile 1:
-{{profile1}}
+Profile 1: {{profile1}}
+Profile 2: {{profile2}}
 
-Profile 2:
-{{profile2}}
+# Required JSON Format
+Return a single-line JSON array with one object:
+[{"isMatch":true,"matchScore":0.8,"reasons":["reason1","reason2","reason3"]}]
 
-# Evaluation Criteria
-Consider:
-- Industry alignment and potential synergies
-- Complementary expertise and resources
-- Matching or compatible goals
-- Potential for mutual benefit
+Consider these factors for the evaluation:
+- Industry alignment
+- Complementary expertise
+- Matching goals
+- Mutual benefit potential
 
-# Response Format
-You must return a JSON array containing exactly one object with these fields:
-- isMatch: boolean indicating if profiles are compatible
-- matchScore: number between 0.0 and 1.0
-- reasons: array of strings explaining the match or non-match
+IMPORTANT: Your entire response must be a single JSON array. No other text.
+Example 1: [{"isMatch":true,"matchScore":0.8,"reasons":["Aligned industries","Similar goals","Complementary skills"]}]
+Example 2: [{"isMatch":false,"matchScore":0.2,"reasons":["Different focus areas","Mismatched goals"]}]
 
-Example valid response:
-[{"isMatch":true,"matchScore":0.85,"reasons":["Complementary expertise","Aligned goals","Industry synergy"]}]
-
-Example valid non-match:
-[{"isMatch":false,"matchScore":0.2,"reasons":["Different industry focus","Misaligned goals"]}]
-
-${matchEvaluationFooter}`;
+RESPOND WITH JSON ONLY. NO OTHER TEXT.`;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
