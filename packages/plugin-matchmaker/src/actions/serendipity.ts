@@ -34,7 +34,7 @@ interface MatchEvaluation {
 
 // Define the template at module level like userProfileEvaluator
 const matchEvaluationTemplate = `
-TASK: Evaluate compatibility between two professional profiles.
+Evaluate if these two profiles are a good professional match.
 
 PROFILE 1:
 {{profile1}}
@@ -42,14 +42,12 @@ PROFILE 1:
 PROFILE 2:
 {{profile2}}
 
-Format the response as an array with a single object:
+Return a JSON array with one object:
 [{
-    "isMatch": boolean,        // true if profiles are compatible
-    "matchScore": number,      // 0.0-1.0 indicating match quality
-    "reasons": string[]       // List of specific reasons for the match
-}]
-
-Return an empty array if evaluation cannot be made.`;
+    "isMatch": boolean,
+    "matchScore": number,
+    "reasons": string[]
+}]`;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -250,7 +248,7 @@ Looking for: ${potentialMatch.matchIntention.goalsObjectives.relationshipType?.j
             agentName: "",
             actorsData: [],
             recentMessagesData: [],
-            roomId: "",
+            roomId: "00000000-0000-0000-0000-000000000000",
             actors: "",
             profile1,
             profile2
