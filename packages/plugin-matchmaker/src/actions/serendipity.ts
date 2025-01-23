@@ -32,7 +32,17 @@ interface MatchEvaluation {
     evaluationSummary: string;
 }
 
-// Define the template at module level like userProfileEvaluator
+const matchEvaluationFooter = `
+RESPOND ONLY WITH VALID JSON. NO OTHER TEXT.
+YOUR RESPONSE MUST:
+1. Start with [
+2. Contain exactly one object
+3. End with ]
+4. Use double quotes for strings
+5. Have no trailing commas
+6. Have no comments
+7. Be on a single line`;
+
 const matchEvaluationTemplate = `# Task: Evaluate compatibility between two professional profiles and determine if they are a good match.
 
 # Context
@@ -52,42 +62,19 @@ Consider:
 - Matching or compatible goals
 - Potential for mutual benefit
 
-# Examples
-Example match evaluation:
-\`\`\`json
-[{
-  "isMatch": true,
-  "matchScore": 0.85,
-  "reasons": [
-    "Both focused on AI/ML applications",
-    "Complementary expertise in research and commercialization",
-    "Aligned goals for industry expansion"
-  ]
-}]
-\`\`\`
+# Response Format
+You must return a JSON array containing exactly one object with these fields:
+- isMatch: boolean indicating if profiles are compatible
+- matchScore: number between 0.0 and 1.0
+- reasons: array of strings explaining the match or non-match
 
-Example non-match:
-\`\`\`json
-[{
-  "isMatch": false,
-  "matchScore": 0.2,
-  "reasons": [
-    "Different industry focuses",
-    "Misaligned business stages",
-    "No clear mutual benefit"
-  ]
-}]
-\`\`\`
+Example valid response:
+[{"isMatch":true,"matchScore":0.85,"reasons":["Complementary expertise","Aligned goals","Industry synergy"]}]
 
-# Instructions
-Evaluate the profiles and return a match evaluation following this format:
-\`\`\`json
-[{
-  "isMatch": boolean,
-  "matchScore": number (0.0 to 1.0),
-  "reasons": string[]
-}]
-\`\`\``;
+Example valid non-match:
+[{"isMatch":false,"matchScore":0.2,"reasons":["Different industry focus","Misaligned goals"]}]
+
+${matchEvaluationFooter}`;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -311,7 +298,7 @@ async function evaluateMatch(
             const results = await generateObjectArray({
                 runtime,
                 context,
-                modelClass: ModelClass.LARGE
+                modelClass: ModelClass.SMALL
             });
 
             if (!results?.length) {
@@ -369,6 +356,12 @@ Would you like me to make an introduction?`,
 
         } catch (error) {
             elizaLogger.error(`Attempt ${retryCount + 1} failed with error:`, error);
+            if (error instanceof SyntaxError) {
+                elizaLogger.error("JSON parsing error:", {
+                    message: error.message,
+                    retryCount
+                });
+            }
             retryCount++;
 
             if (retryCount === MAX_RETRIES) {
@@ -376,7 +369,6 @@ Would you like me to make an introduction?`,
                 return null;
             }
 
-            // Add a small delay before retrying
             await new Promise(resolve => setTimeout(resolve, retryCount * 1000));
         }
     }
