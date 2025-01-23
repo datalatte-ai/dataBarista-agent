@@ -33,8 +33,7 @@ interface MatchEvaluation {
 }
 
 // Define the template at module level like userProfileEvaluator
-const matchEvaluationTemplate = `
-Evaluate if these two profiles are a good professional match.
+const matchEvaluationTemplate = `You are a JSON generator. Your task is to evaluate two profiles and return a match evaluation in EXACT JSON format.
 
 PROFILE 1:
 {{profile1}}
@@ -42,12 +41,29 @@ PROFILE 1:
 PROFILE 2:
 {{profile2}}
 
-Return a JSON array with one object:
-[{
-    "isMatch": boolean,
-    "matchScore": number,
-    "reasons": string[]
-}]`;
+STRICT RESPONSE RULES:
+1. Start with opening bracket [
+2. Add ONE object with opening brace {
+3. Add these EXACT fields:
+   - "isMatch": true or false (boolean)
+   - "matchScore": number between 0.0 and 1.0
+   - "reasons": array of strings
+4. Close the object with }
+5. Close the array with ]
+
+EXAMPLE VALID RESPONSE:
+[{"isMatch":true,"matchScore":0.8,"reasons":["Aligned industry focus","Complementary expertise","Matching goals"]}]
+
+YOUR RESPONSE MUST:
+- Be exactly one line
+- Have no spaces after commas
+- Have no spaces around colons
+- Have no line breaks
+- Have no comments
+- Have no trailing comma
+- Start with [ and end with ]
+
+RESPOND WITH JSON ONLY:`;
 
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
@@ -223,17 +239,11 @@ async function getMatchPool(runtime: IAgentRuntime, currentUserId: string): Prom
 }
 
 function createMatchmakingTemplate(currentUser: UserProfile, potentialMatch: MatchPool): string {
-    const profile1 = `Role: ${currentUser.professionalContext.role}
-Industry: ${currentUser.professionalContext.industry}
-Experience: ${currentUser.professionalContext.experienceLevel}
-Goals: ${currentUser.goalsObjectives.targetOutcomes?.join(', ')}
-Looking for: ${currentUser.goalsObjectives.relationshipType?.join(', ')}`;
+    const profile1 = `Industry: ${currentUser.professionalContext.industry}
+Goals: ${currentUser.goalsObjectives.targetOutcomes?.join(', ')}`;
 
-    const profile2 = `Role: ${potentialMatch.matchIntention.professionalContext.role}
-Industry: ${potentialMatch.matchIntention.professionalContext.industry}
-Experience: ${potentialMatch.matchIntention.professionalContext.experienceLevel}
-Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', ')}
-Looking for: ${potentialMatch.matchIntention.goalsObjectives.relationshipType?.join(', ')}`;
+    const profile2 = `Industry: ${potentialMatch.matchIntention.professionalContext.industry}
+Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', ')}`;
 
     return composeContext({
         template: matchEvaluationTemplate,
