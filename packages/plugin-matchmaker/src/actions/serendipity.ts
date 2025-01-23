@@ -209,49 +209,37 @@ function createMatchmakingTemplate(currentUser: UserProfile, potentialMatch: Mat
 TASK: Evaluate if these users would be a good professional networking match.
 
 Current User:
-Role: ${currentUser.professionalContext.role}
-Industry: ${currentUser.professionalContext.industry}
-Experience: ${currentUser.professionalContext.experienceLevel}
-Expertise: ${currentUser.professionalContext.expertise?.join(', ')}
-Goals: ${currentUser.goalsObjectives.targetOutcomes?.join(', ')}
-Looking for: ${currentUser.goalsObjectives.relationshipType?.join(', ')}
-Industry focus: ${currentUser.preferencesRequirements.industryFocus?.join(', ')}
+${formatProfileSummary(currentUser)}
 
 Potential Match:
-Role: ${potentialMatch.matchIntention.professionalContext.role}
-Industry: ${potentialMatch.matchIntention.professionalContext.industry}
-Experience: ${potentialMatch.matchIntention.professionalContext.experienceLevel}
-Expertise: ${potentialMatch.matchIntention.professionalContext.expertise?.join(', ')}
-Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', ')}
-Looking for: ${potentialMatch.matchIntention.goalsObjectives.relationshipType?.join(', ')}
-Industry focus: ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(', ')}
+${formatProfileSummary(potentialMatch.matchIntention)}
 
-IMPORTANT: Return a JSON array containing EXACTLY ONE object with this structure:
-[{
-    "isMatch": boolean,      // true if users are a good match
-    "matchScore": number,    // 0.0 to 1.0 score indicating match quality
-    "reasons": string[]      // List of reasons why they match or don't match
-}]
+IMPORTANT - RESPONSE FORMAT REQUIREMENTS:
+1. Return ONLY a JSON array containing EXACTLY ONE object
+2. The response MUST be valid JSON - no extra text before or after
+3. The object MUST have these exact fields:
+   - "isMatch": boolean
+   - "matchScore": number between 0.0 and 1.0
+   - "reasons": array of strings
 
-Example response:
+Example of VALID response:
 [{
     "isMatch": true,
     "matchScore": 0.8,
     "reasons": [
-        "Both focused on B2B SaaS industry",
-        "Complementary expertise in AI and business development",
-        "Aligned goals for strategic partnership"
+        "Strong industry alignment in events technology",
+        "Complementary expertise in AI and event management",
+        "Mutual interest in business partnership"
     ]
 }]
 
-Consider these factors when evaluating:
-1. Industry alignment
-2. Complementary expertise
-3. Mutual goals
-4. Relationship type compatibility
-5. Experience level compatibility
+Consider these factors:
+1. Industry alignment and complementary expertise
+2. Mutual goals and interests
+3. Relationship type compatibility
+4. Experience level compatibility
 
-Return a valid JSON without any text or symbol before or after.`;
+Return ONLY the JSON array - no other text.`;
 }
 
 async function evaluateMatch(
@@ -276,16 +264,45 @@ async function evaluateMatch(
     const template = createMatchmakingTemplate(currentUser, potentialMatch);
     elizaLogger.info("Generated match evaluation template:", { template });
 
-                        const results = await generateObjectArray({
-                            runtime,
-        context: template,
-        modelClass: ModelClass.SMALL
-    });
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let results = null;
 
-    elizaLogger.info("Raw match evaluation results:", { results });
+    while (retryCount < MAX_RETRIES) {
+        try {
+            results = await Promise.race([
+                generateObjectArray({
+                    runtime,
+                    context: template,
+                    modelClass: ModelClass.SMALL
+                }),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Model timeout')), 30000)
+                )
+            ]);
+
+            if (results?.[0]) {
+                break; // Successfully got results
+            }
+
+            retryCount++;
+            elizaLogger.warn(`Attempt ${retryCount} failed to get valid results`);
+
+            if (retryCount < MAX_RETRIES) {
+                await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Exponential backoff
+            }
+        } catch (error) {
+            retryCount++;
+            elizaLogger.error(`Attempt ${retryCount} failed with error:`, error);
+
+            if (retryCount < MAX_RETRIES) {
+                await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+            }
+        }
+    }
 
     if (!results?.[0]) {
-        elizaLogger.warn("No evaluation results returned");
+        elizaLogger.warn("Failed to get evaluation results after all retries");
         return null;
     }
 
@@ -298,41 +315,41 @@ async function evaluateMatch(
 
     if (result.isMatch && result.matchScore >= 0.1) {
         elizaLogger.info("Match criteria met", {
-                                username: potentialMatch.username,
+            username: potentialMatch.username,
             score: result.matchScore
         });
 
         // Store the match data
         const matchCacheKey = `matchmaker/matches/${userId}`;
-                                const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
+        const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
 
         elizaLogger.info("Existing matches found:", {
             count: existingMatches.matches.length,
             matchCacheKey
         });
 
-                                const newMatch: MatchRecord = {
-                                    userId: potentialMatch.userId,
-                                    username: potentialMatch.username,
-                                    matchedAt: Date.now(),
+        const newMatch: MatchRecord = {
+            userId: potentialMatch.userId,
+            username: potentialMatch.username,
+            matchedAt: Date.now(),
             matchScore: result.matchScore,
             reasons: result.reasons,
             complementaryFactors: ["Technical expertise complement", "Industry alignment"],
             potentialSynergies: [],
-                                    status: 'pending'
-                                };
+            status: 'pending'
+        };
 
         elizaLogger.info("Storing new match:", { newMatch });
 
-                                await runtime.cacheManager.set(matchCacheKey, {
-                                    matches: [...existingMatches.matches, newMatch],
-                                    lastUpdated: Date.now()
-                                });
+        await runtime.cacheManager.set(matchCacheKey, {
+            matches: [...existingMatches.matches, newMatch],
+            lastUpdated: Date.now()
+        });
 
         elizaLogger.info("Match successfully stored");
 
         // Return detailed match notification
-                                return {
+        return {
             text: `Great news! I found a match for you! @${potentialMatch.username} (${potentialMatch.matchIntention.professionalContext.role}) is interested in ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(", ")}.
 
 Their goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(", ")}
@@ -341,12 +358,12 @@ Why this is a great match:
 ${result.reasons.map(r => `• ${r}`).join('\n')}
 
 Would you like me to make an introduction?`,
-                                    action: "SERENDIPITY"
-                                };
-                            }
+            action: "SERENDIPITY"
+        };
+    }
 
     elizaLogger.info("Match criteria not met", {
-                                username: potentialMatch.username,
+        username: potentialMatch.username,
         score: result.matchScore
     });
     return null;
