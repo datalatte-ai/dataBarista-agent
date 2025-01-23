@@ -33,54 +33,60 @@ interface MatchEvaluation {
 }
 
 // Define the template at module level like userProfileEvaluator
-const matchEvaluationTemplate = `TASK: Evaluate compatibility between two professional profiles and return a match evaluation.
+const matchEvaluationTemplate = `# Task: Evaluate compatibility between two professional profiles and determine if they are a good match.
 
-# START OF EXAMPLES
-Example of expected output:
-\`\`\`json
-[
-  {
-    "isMatch": true,
-    "matchScore": 0.8,
-    "reasons": ["Aligned industry focus", "Complementary expertise", "Matching goals"]
-  }
-]
-\`\`\`
+# Context
+You are evaluating potential business/professional matches based on their profiles, goals, and industry alignment.
 
-Another example with no match:
-\`\`\`json
-[
-  {
-    "isMatch": false,
-    "matchScore": 0.2,
-    "reasons": ["Different industry focus", "Misaligned goals"]
-  }
-]
-\`\`\`
-# END OF EXAMPLES
+# Profile Information
+Profile 1:
+{{profile1}}
 
-# EVALUATION CRITERIA
+Profile 2:
+{{profile2}}
+
+# Evaluation Criteria
 Consider:
 - Industry alignment and potential synergies
 - Complementary expertise and resources
 - Matching or compatible goals
 - Potential for mutual benefit
 
-PROFILE 1:
-{{profile1}}
-
-PROFILE 2:
-{{profile2}}
-
-Response should be a JSON array with exactly one object containing match evaluation results:
+# Examples
+Example match evaluation:
 \`\`\`json
-[
-  {
-    "isMatch": boolean,
-    "matchScore": number between 0.0 and 1.0,
-    "reasons": array of strings explaining the evaluation
-  }
-]
+[{
+  "isMatch": true,
+  "matchScore": 0.85,
+  "reasons": [
+    "Both focused on AI/ML applications",
+    "Complementary expertise in research and commercialization",
+    "Aligned goals for industry expansion"
+  ]
+}]
+\`\`\`
+
+Example non-match:
+\`\`\`json
+[{
+  "isMatch": false,
+  "matchScore": 0.2,
+  "reasons": [
+    "Different industry focuses",
+    "Misaligned business stages",
+    "No clear mutual benefit"
+  ]
+}]
+\`\`\`
+
+# Instructions
+Evaluate the profiles and return a match evaluation following this format:
+\`\`\`json
+[{
+  "isMatch": boolean,
+  "matchScore": number (0.0 to 1.0),
+  "reasons": string[]
+}]
 \`\`\``;
 
 export const serendipityAction: Action = {
@@ -135,9 +141,9 @@ export const serendipityAction: Action = {
     handler: async (
         runtime: IAgentRuntime,
         message: Memory,
-        state?: State,
-        options?: any,
-        callback?: HandlerCallback
+        state: State,
+        options: any,
+        callback: HandlerCallback
     ): Promise<Content | void> => {
         try {
             elizaLogger.info("=== Starting Serendipity Matchmaking ===");
@@ -188,7 +194,13 @@ export const serendipityAction: Action = {
                     industry: potentialMatch.matchIntention.professionalContext.industry
                 });
 
-                const matchResult = await evaluateMatch(runtime, userProfileCache.data, potentialMatch, message.userId);
+                const matchResult = await evaluateMatch(
+                    runtime,
+                    userProfileCache.data,
+                    potentialMatch,
+                    message.userId,
+                    state
+                );
 
                 if (matchResult) {
                     elizaLogger.info("Match found and notification prepared:", {
@@ -196,20 +208,14 @@ export const serendipityAction: Action = {
                         notification: matchResult
                     });
 
-                    // Create response with CONTINUE action
-                    const response: Content = {
-                        text: matchResult.text,
-                        action: "CONTINUE"  // Changed from SERENDIPITY to CONTINUE
-                    };
-
                     // Use callback if available
                     if (callback) {
                         elizaLogger.info("Sending response via callback");
-                        await callback(response);
+                        await callback(matchResult);
                     }
 
-                    elizaLogger.info("Returning match notification:", { response });
-                    return response;
+                    elizaLogger.info("Returning match notification:", { response: matchResult });
+                    return matchResult;
                 }
             }
 
@@ -256,39 +262,23 @@ async function getMatchPool(runtime: IAgentRuntime, currentUserId: string): Prom
     return matchPool.filter(p => p.userId !== currentUserId);
 }
 
-function createMatchmakingTemplate(currentUser: UserProfile, potentialMatch: MatchPool): string {
-    const profile1 = `Industry: ${currentUser.professionalContext.industry}
-Goals: ${currentUser.goalsObjectives.targetOutcomes?.join(', ')}`;
-
-    const profile2 = `Industry: ${potentialMatch.matchIntention.professionalContext.industry}
-Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', ')}`;
-
-    return composeContext({
-        template: matchEvaluationTemplate,
-        state: {
-                    bio: "",
-                    lore: "",
-                    messageDirections: "",
-                    postDirections: "",
-                    recentMessages: "",
-            currentInfo: "",
-            senderName: "",
-            agentName: "",
-                    actorsData: [],
-                    recentMessagesData: [],
-            roomId: "00000000-0000-0000-0000-000000000000",
-            actors: "",
-            profile1,
-            profile2
-        }
-    });
+function formatProfileSummary(profile: UserProfile): string {
+    const { professionalContext, goalsObjectives, preferencesRequirements } = profile;
+    return `Role: ${professionalContext.role || 'Not specified'}
+Industry: ${professionalContext.industry || 'Not specified'}
+Experience: ${professionalContext.experienceLevel || 'Not specified'}
+Expertise: ${professionalContext.expertise?.join(', ') || 'Not specified'}
+Goals: ${goalsObjectives.targetOutcomes?.join(', ') || 'Not specified'}
+Looking for: ${goalsObjectives.relationshipType?.join(', ') || 'Not specified'}
+Industry focus: ${preferencesRequirements.industryFocus?.join(', ') || 'Not specified'}`;
 }
 
 async function evaluateMatch(
     runtime: IAgentRuntime,
     currentUser: UserProfile,
     potentialMatch: MatchPool,
-    userId: string
+    userId: string,
+    state: State
 ): Promise<Content | null> {
     elizaLogger.info("Starting match evaluation", {
         currentUser: {
@@ -303,67 +293,63 @@ async function evaluateMatch(
         }
     });
 
-    const context = createMatchmakingTemplate(currentUser, potentialMatch);
+    // Update state with profile information
+    state.profile1 = formatProfileSummary(currentUser);
+    state.profile2 = formatProfileSummary(potentialMatch.matchIntention);
+
+    const context = composeContext({
+        state,
+        template: matchEvaluationTemplate
+    });
     elizaLogger.info("Generated match evaluation template:", { context });
 
-    try {
-                        const results = await generateObjectArray({
-                            runtime,
-                            context,
-            modelClass: ModelClass.LARGE
-        });
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
-        if (!results?.length) {
-            elizaLogger.warn("No evaluation results returned");
-            return null;
-        }
-
-        const result = results[0];
-        elizaLogger.info("Processing evaluation result:", {
-            isMatch: result.isMatch,
-            matchScore: result.matchScore,
-            reasons: result.reasons,
-            confidence: result.confidence
-        });
-
-        if (result.isMatch && result.matchScore >= 0.1) {
-            elizaLogger.info("Match criteria met", {
-                                username: potentialMatch.username,
-                score: result.matchScore
+    while (retryCount < MAX_RETRIES) {
+        try {
+            const results = await generateObjectArray({
+                runtime,
+                context,
+                modelClass: ModelClass.LARGE
             });
 
-            // Store the match data
-            const matchCacheKey = `matchmaker/matches/${userId}`;
-                                const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
+            if (!results?.length) {
+                elizaLogger.warn(`Attempt ${retryCount + 1}: No evaluation results returned`);
+                retryCount++;
+                continue;
+            }
 
-            elizaLogger.info("Existing matches found:", {
-                count: existingMatches.matches.length,
-                matchCacheKey
-            });
-
-                                const newMatch: MatchRecord = {
-                                    userId: potentialMatch.userId,
-                                    username: potentialMatch.username,
-                                    matchedAt: Date.now(),
+            const result = results[0];
+            elizaLogger.info("Match evaluation result:", {
+                isMatch: result.isMatch,
                 matchScore: result.matchScore,
-                reasons: result.reasons,
-                complementaryFactors: ["Technical expertise complement", "Industry alignment"],
-                potentialSynergies: [],
-                                    status: 'pending'
-                                };
+                reasons: result.reasons
+            });
 
-            elizaLogger.info("Storing new match:", { newMatch });
+            if (result.isMatch && result.matchScore >= 0.1) {
+                // Store match and return notification
+                const matchCacheKey = `matchmaker/matches/${userId}`;
+                const existingMatches = await runtime.cacheManager.get<MatchHistory>(matchCacheKey) || { matches: [] };
 
-                                await runtime.cacheManager.set(matchCacheKey, {
-                                    matches: [...existingMatches.matches, newMatch],
-                                    lastUpdated: Date.now()
-                                });
+                const newMatch: MatchRecord = {
+                    userId: potentialMatch.userId,
+                    username: potentialMatch.username,
+                    matchedAt: Date.now(),
+                    matchScore: result.matchScore,
+                    reasons: result.reasons,
+                    complementaryFactors: ["Technical expertise complement", "Industry alignment"],
+                    potentialSynergies: [],
+                    status: 'pending'
+                };
 
-            elizaLogger.info("Match successfully stored");
+                await runtime.cacheManager.set(matchCacheKey, {
+                    matches: [...existingMatches.matches, newMatch],
+                    lastUpdated: Date.now()
+                });
 
-            // Return detailed match notification
-                                return {
-                text: `Great news! I found a match for you! @${potentialMatch.username} (${potentialMatch.matchIntention.professionalContext.role}) is interested in ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(", ")}.
+                return {
+                    text: `Great news! I found a match for you! @${potentialMatch.username} (${potentialMatch.matchIntention.professionalContext.role}) is interested in ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(", ")}.
 
 Their goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(", ")}
 
@@ -371,28 +357,29 @@ Why this is a great match:
 ${result.reasons.map(r => `• ${r}`).join('\n')}
 
 Would you like me to make an introduction?`,
-                                    action: "SERENDIPITY"
-                                };
-                            }
+                    action: "CONTINUE"  // Changed from SERENDIPITY to CONTINUE to follow the pattern in continue.ts
+                };
+            }
 
-        elizaLogger.info("Match criteria not met", {
-                                username: potentialMatch.username,
-            score: result.matchScore
-                            });
-        return null;
-                    } catch (error) {
-        elizaLogger.error("Error in match evaluation:", error);
-        return null;
+            elizaLogger.info("Match criteria not met", {
+                username: potentialMatch.username,
+                score: result.matchScore
+            });
+            return null;
+
+        } catch (error) {
+            elizaLogger.error(`Attempt ${retryCount + 1} failed with error:`, error);
+            retryCount++;
+
+            if (retryCount === MAX_RETRIES) {
+                elizaLogger.error("Max retries reached, giving up on match evaluation");
+                return null;
+            }
+
+            // Add a small delay before retrying
+            await new Promise(resolve => setTimeout(resolve, retryCount * 1000));
+        }
     }
-}
 
-function formatProfileSummary(profile: UserProfile): string {
-    const { professionalContext, goalsObjectives, preferencesRequirements } = profile;
-    return `Role: ${professionalContext.role || 'Not specified'}
-Industry: ${professionalContext.industry || 'Not specified'}
-Experience: ${professionalContext.experienceLevel || 'Not specified'}
-Expertise: ${professionalContext.expertise?.join(', ') || 'Not specified'}
-Goals: ${goalsObjectives.targetOutcomes?.join(', ') || 'Not specified'}
-Looking for: ${goalsObjectives.relationshipType?.join(', ') || 'Not specified'}
-Industry focus: ${preferencesRequirements.industryFocus?.join(', ') || 'Not specified'}`;
+    return null;
 }
