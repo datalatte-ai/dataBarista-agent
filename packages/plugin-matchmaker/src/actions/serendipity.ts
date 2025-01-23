@@ -226,14 +226,15 @@ Goals: ${potentialMatch.matchIntention.goalsObjectives.targetOutcomes?.join(', '
 Looking for: ${potentialMatch.matchIntention.goalsObjectives.relationshipType?.join(', ')}
 Industry focus: ${potentialMatch.matchIntention.preferencesRequirements.industryFocus?.join(', ')}
 
-IMPORTANT: Return a JSON array containing EXACTLY ONE object with this structure:
+IMPORTANT: You must output ONLY a valid JSON array containing exactly one object. No other text before or after.
+The array must follow this exact structure:
 [{
     "isMatch": boolean,      // true if users are a good match
     "matchScore": number,    // 0.0 to 1.0 score indicating match quality
     "reasons": string[]      // List of reasons why they match or don't match
 }]
 
-Example response:
+Example of valid output:
 [{
     "isMatch": true,
     "matchScore": 0.8,
@@ -251,7 +252,7 @@ Consider these factors when evaluating:
 4. Relationship type compatibility
 5. Experience level compatibility
 
-Return an empty array [] ONLY if you cannot make a determination.`;
+CRITICAL: Output must be valid JSON only. No explanations, no preamble, no additional text.`;
 }
 
 async function evaluateMatch(
