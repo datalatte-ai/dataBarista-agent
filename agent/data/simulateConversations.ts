@@ -156,6 +156,87 @@ const syntheticConversations = [
     }
 ];
 
+// Web3 Industry Profiles
+export const test_defi_architect = {
+    messages: [
+        "Hi! I'm a DeFi protocol architect with 5 years of experience in designing and implementing smart contracts. I specialize in automated market makers and yield optimization protocols. Currently looking to connect with security auditors and frontend developers for a new DeFi project I'm launching.",
+        "My expertise is in Solidity, Rust, and cross-chain bridges. I've previously built protocols handling over $100M TVL. Looking for technical co-founders or partners who can complement my backend expertise with strong frontend and UX skills.",
+        "Interested in DeFi innovation, particularly in areas of MEV protection and capital efficiency. Open to both advisory roles and direct collaboration."
+    ]
+};
+
+export const test_web3_security = {
+    messages: [
+        "Senior smart contract security researcher here. I've audited major DeFi protocols and NFT platforms, identifying critical vulnerabilities. Looking to connect with protocol developers who prioritize security.",
+        "I specialize in formal verification and automated vulnerability detection. Currently developing new security tools for the Ethereum ecosystem. Seeking partnerships with DeFi projects and other security researchers.",
+        "My goal is to improve the overall security standards in web3. Open to consulting, advisory roles, or joining a project full-time if the mission aligns."
+    ]
+};
+
+export const test_nft_strategist = {
+    messages: [
+        "Web3 marketing strategist specializing in NFT launches and community building. Have helped several collections reach top 10 on OpenSea. Looking to connect with artists and developers planning new NFT projects.",
+        "My expertise includes community management, token economics, and go-to-market strategies for web3 projects. I've worked with both PFP collections and utility-focused NFTs.",
+        "Interested in projects that bridge web2 and web3, especially in gaming and entertainment. Seeking collaborations with technical teams who need help with market positioning and community growth."
+    ]
+};
+
+export const test_dao_governance = {
+    messages: [
+        "DAO governance specialist with experience in designing and implementing decentralized voting systems. Previously helped structure major DeFi protocol DAOs and their transition to full decentralization.",
+        "Looking to connect with projects planning to launch or optimize their DAO structure. Can help with token economics, governance parameters, and community incentives.",
+        "Particularly interested in innovative governance models and quadratic funding implementations. Open to advisory roles or full-time positions in established DAOs."
+    ]
+};
+
+export const test_crypto_researcher = {
+    messages: [
+        "Cryptography researcher focusing on zero-knowledge proofs and their applications in blockchain privacy. Currently developing new protocols for private DeFi transactions.",
+        "Seeking collaborations with teams working on privacy-preserving applications, particularly in the DeFi space. Can contribute expertise in ZK-SNARKs and secure multiparty computation.",
+        "Looking for both technical partnerships and funding opportunities. Open to joining advisory boards for privacy-focused protocols."
+    ]
+};
+
+export const test_web3_gaming = {
+    messages: [
+        "Game economy designer specializing in web3 gaming. Have designed tokenomics and reward systems for several successful blockchain games. Looking for partnerships with game studios entering web3.",
+        "My expertise includes play-to-earn mechanics, NFT integration, and sustainable game economies. Previously worked on projects with over 100k daily active users.",
+        "Interested in creating more sustainable and engaging web3 gaming models. Seeking collaborations with game developers and artists."
+    ]
+};
+
+export const test_defi_analyst = {
+    messages: [
+        "DeFi market analyst with background in TradFi. Specialize in protocol metrics, TVL analysis, and market trends. Looking to connect with DeFi projects needing strategic insights.",
+        "Have worked with major DeFi dashboards and analytics platforms. Can help optimize protocol parameters and identify growth opportunities.",
+        "Interested in data-driven protocol optimization and risk assessment. Open to advisory roles or full-time positions in established DeFi projects."
+    ]
+};
+
+export const test_layer2_dev = {
+    messages: [
+        "Layer 2 protocol developer with focus on rollup technology. Currently working on scaling solutions for Ethereum. Seeking partnerships with projects looking to deploy on L2s.",
+        "Experience in optimistic rollups and ZK technology. Have contributed to major L2 protocols and helped projects optimize their L2 deployments.",
+        "Looking to collaborate with teams building infrastructure or applications on L2s. Particularly interested in novel L2 use cases."
+    ]
+};
+
+export const test_web3_infra = {
+    messages: [
+        "Web3 infrastructure architect specializing in node operations and RPC services. Built and scaled infrastructure serving millions of requests daily.",
+        "Looking to partner with projects needing reliable infrastructure solutions. Can help with architecture design and scaling strategies.",
+        "Interested in improving web3 infrastructure reliability and decentralization. Open to technical partnerships or advisory roles."
+    ]
+};
+
+export const test_tokenomics_expert = {
+    messages: [
+        "Tokenomics designer with experience in both DeFi and GameFi. Have designed economic models for successful tokens with >$100M market cap.",
+        "Specialize in sustainable token economies, emission schedules, and incentive alignment. Looking to collaborate with new web3 projects.",
+        "Interested in innovative token models and mechanism design. Open to consulting or joining projects in early stages."
+    ]
+};
+
 async function sendMessage(message: {
     userId: string;
     username: string;
