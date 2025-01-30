@@ -1,171 +1,101 @@
-import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, State, elizaLogger } from "@elizaos/core";
-import { composeContext } from "@elizaos/core";
-import { UserProfile, UserProfileCache, MatchPool, MatchPoolCache } from "../types";
-import { REQUIRED_FIELDS, NETWORKING_PURPOSES, RELATIONSHIP_TYPES, EXPERIENCE_LEVELS, COMPANY_STAGES } from "../constants";
-import { checkFields } from "../utils/validation";
+import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, generateText, State, elizaLogger, composeContext } from "@elizaos/core";
+import dotenv from "dotenv";
+dotenv.config();
+// @ts-ignore
+import DKG from "dkg.js";
 
 const extractionTemplate = `
-TASK: Extract comprehensive professional information from the conversation.
+Extract the user's (goal & preference) plus their (background personal information) including their demographic, interests, skills, experience and behavior.
 
 Recent messages:
 {{recentMessages}}
 
-Current known information:
-{{currentInfo}}
+Format each  with:
+- category (goal & preference, background personal information)
+- name (specific detail)
+- confidence (0.0-1.0)
+- evidence (why you think this is an interest)
 
-Please analyze the conversation and extract information in these three categories:
-
-1. Professional Context & Background
-- Current role/position
-- Industry/sector
-- Experience level (entry/intermediate/senior/executive/expert)
-- Company stage/size
-- Geographic location/market focus
-- Core expertise/specialization
-
-2. Goals & Objectives
-- Primary networking purpose
-- Target outcomes
-- Timeline/urgency
-- Scale/scope of needs (funding amounts, market reach, etc.)
-- Type of relationship sought (mentorship, partnership, investment, etc.)
-
-3. Preferences & Requirements
-- Preferred counterpart profiles (experience level, industry background)
-- Geographic/market preferences
-- Industry/sector focus
-- Stage/maturity preferences
-- Specific expertise needed
-- Deal parameters (if applicable)
-
-Format the response as an array with a single object containing these categories:
-[{
-    "professionalContext": {
-        "role": string | null,
-        "industry": string | null,
-        "experienceLevel": string | null,
-        "companyStage": string | null,
-        "location": string | null,
-        "expertise": string[] | null,
-        "confidence": {
-            "role": number,
-            "industry": number,
-            "experienceLevel": number,
-            "companyStage": number,
-            "location": number,
-            "expertise": number
+Example output:
+{
+    "interests": [
+        {
+            "category": "technology",
+            "name": "AI Development",
+            "confidence": 0.9,
+            "evidence": "User explicitly states they are an AI agent developer"
         }
-    },
-    "goalsObjectives": {
-        "primaryPurpose": string | null,
-        "targetOutcomes": string[] | null,
-        "timeline": string | null,
-        "scale": {
-            "fundingAmount": string | null,
-            "marketReach": string | null,
-            "other": string | null
-        } | null,
-        "relationshipType": string[] | null,
-        "confidence": {
-            "primaryPurpose": number,
-            "targetOutcomes": number,
-            "timeline": number,
-            "scale": number,
-            "relationshipType": number
+    ]
+}
+
+Only include interests that have clear evidence from the conversation.`;
+
+async function constructKnowledgeGraph(runtime: IAgentRuntime, extractedData: any, username: string) {
+    // Convert the simple interest format to JSON-LD
+    const knowledgeGraph = {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "@id": `uuid:${username}`,
+        "identifier": username,
+        "dateCreated": new Date().toISOString(),
+        "lastModified": new Date().toISOString(),
+        "hasInterest": [],
+        "metadata": {
+            "@type": "DataFeedItem",
+            "dateCreated": new Date().toISOString(),
+            "provider": {
+                "@type": "Organization",
+                "name": "Eliza Matchmaker"
+            }
         }
-    },
-    "preferencesRequirements": {
-        "counterpartProfiles": {
-            "experienceLevel": string[] | null,
-            "background": string[] | null
-        } | null,
-        "geographicPreferences": string[] | null,
-        "industryFocus": string[] | null,
-        "stagePreferences": string[] | null,
-        "requiredExpertise": string[] | null,
-        "dealParameters": {
-            "investmentSize": string | null,
-            "metrics": string[] | null,
-            "other": string | null
-        } | null,
-        "confidence": {
-            "counterpartProfiles": number,
-            "geographicPreferences": number,
-            "industryFocus": number,
-            "stagePreferences": number,
-            "requiredExpertise": number,
-            "dealParameters": number
-        }
+    };
+
+    if (extractedData?.interests && Array.isArray(extractedData.interests)) {
+        knowledgeGraph.hasInterest = extractedData.interests
+            .filter(interest => interest.confidence > 0.5)
+            .map(interest => ({
+                "@type": "Thing",
+                "name": interest.name,
+                "additionalProperty": [
+                    {
+                        "@type": "PropertyValue",
+                        "name": "category",
+                        "value": interest.category
+                    },
+                    {
+                        "@type": "PropertyValue",
+                        "name": "confidence",
+                        "value": interest.confidence
+                    },
+                    {
+                        "@type": "PropertyValue",
+                        "name": "evidence",
+                        "value": interest.evidence
+                    }
+                ]
+            }));
     }
-}]
 
-For each field:
-1. Include a confidence score (0.0-1.0) based on how directly the information was stated
-2. Only include fields where information was found in the conversation
-3. Use standardized values where applicable:
-   - Experience levels: ${EXPERIENCE_LEVELS.join(", ")}
-   - Company stages: ${COMPANY_STAGES.join(", ")}
-   - Networking purposes: ${NETWORKING_PURPOSES.join(", ")}
-   - Relationship types: ${RELATIONSHIP_TYPES.join(", ")}
-
-Return an empty array if no meaningful information was found.`;
+    elizaLogger.info("Constructed knowledge graph:", knowledgeGraph);
+    return knowledgeGraph;
+}
 
 export const userProfileEvaluator: Evaluator = {
     name: "userProfileEvaluator",
-    similes: ["EXTRACT_PROFESSIONAL_PROFILE", "GET_NETWORKING_PREFERENCES", "ANALYZE_BACKGROUND"],
-    description: "Extracts and stores comprehensive professional and networking information",
+    similes: ["EXTRACT_INTERESTS", "GET_INTERESTS", "ANALYZE_INTERESTS"],
+    description: "Extracts and stores user interests in DKG",
 
     validate: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
-        try {
-            const username = state?.senderName || message.userId;
-            const cacheKey = `${runtime.character.name}/${username}/data`;
-            const cached = await runtime.cacheManager.get<UserProfileCache>(cacheKey);
-
-            // Always validate to continuously update and refine the profile
-            return true;
-        } catch (error) {
-            console.error("Error in userProfileEvaluator validate:", error);
-            return false;
-        }
+        return true; // Always validate to continuously update interests
     },
 
     handler: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {
             const username = state?.senderName || message.userId;
-            const cacheKey = `${runtime.character.name}/${username}/data`;
-
-            // 1. Get cached data
-            const cached = await runtime.cacheManager.get<UserProfileCache>(cacheKey);
-            const currentData: UserProfile = cached?.data || {
-                professionalContext: {
-                    role: null,
-                    industry: null,
-                    experienceLevel: null,
-                    companyStage: null,
-                    location: null,
-                    expertise: null,
-                    confidence: {}
-                },
-                goalsObjectives: {
-                    primaryPurpose: null,
-                    targetOutcomes: null,
-                    timeline: null,
-                    scale: null,
-                    relationshipType: null,
-                    confidence: {}
-                },
-                preferencesRequirements: {
-                    counterpartProfiles: null,
-                    geographicPreferences: null,
-                    industryFocus: null,
-                    stagePreferences: null,
-                    requiredExpertise: null,
-                    dealParameters: null,
-                    confidence: {}
-                },
-                completed: false,
-                lastUpdated: new Date().toISOString()
-            };
+            if (!username) {
+                elizaLogger.error("No username found in state or message");
+                return false;
+            }
 
             // Get recent conversation history
             if (!state) {
@@ -180,13 +110,13 @@ export const userProfileEvaluator: Evaluator = {
                 messageDirections: "",
                 postDirections: "",
                 recentMessages: state.recentMessages || message.content.text,
-                currentInfo: JSON.stringify(currentData, null, 2),
+                currentInfo: "{}",
                 senderName: username,
                 agentName: runtime.character.name,
-                actorsData: state.actorsData || [],
-                recentMessagesData: state.recentMessagesData || [],
                 roomId: message.roomId,
-                actors: state.actors || ""
+                actors: state.actors || "",
+                actorsData: [],
+                recentMessagesData: []
             };
 
             const context = composeContext({
@@ -194,14 +124,7 @@ export const userProfileEvaluator: Evaluator = {
                 state: extractionState
             });
 
-            //elizaLogger.info("=== UserProfileEvaluator Started ===");
-            //elizaLogger.info("Input Context:", {
-            //    username,
-            //    recentMessages: state.recentMessages,
-            //    currentData: JSON.stringify(currentData, null, 2)
-            //});
-
-            // elizaLogger.info("Composed Context:", context);
+            elizaLogger.info("Starting interest extraction for user:", { username });
 
             const results = await generateObjectArray({
                 runtime,
@@ -210,173 +133,160 @@ export const userProfileEvaluator: Evaluator = {
             });
 
             if (!results?.length) {
-                elizaLogger.warn("UserProfileEvaluator: No results extracted");
+                elizaLogger.warn("No interests extracted");
                 return false;
             }
 
             const extractedData = results[0];
-            // elizaLogger.info("Extracted Data:", JSON.stringify(extractedData, null, 2));
+            elizaLogger.info("Extracted interests:", { extractedData });
 
-            // Merge existing data with new data, preserving highest confidence values
-            const newData: UserProfile = {
-                professionalContext: mergeWithConfidence(currentData.professionalContext, extractedData.professionalContext),
-                goalsObjectives: mergeWithConfidence(currentData.goalsObjectives, extractedData.goalsObjectives),
-                preferencesRequirements: mergeWithConfidence(currentData.preferencesRequirements, extractedData.preferencesRequirements),
-                completed: false,
-                lastUpdated: new Date().toISOString()
-            };
+            // Transform to knowledge graph
+            const knowledgeGraph = await constructKnowledgeGraph(runtime, extractedData, username);
+            elizaLogger.info("Constructed knowledge graph:", { knowledgeGraph });
 
-            // Check if all required fields are present with sufficient confidence
-            const isComplete = checkCompletion(newData);
-            if (isComplete) {
-                newData.completed = true;
-            }
-
-            // Add debug logging
-            //elizaLogger.info("Profile Completion Status:", {
-            //    username,
-            //    isComplete,
-            //    completed: newData.completed,
-            //    checkResults: {
-            //        professional: checkFields(newData.professionalContext, REQUIRED_FIELDS.professionalContext),
-            //        goals: checkFields(newData.goalsObjectives, REQUIRED_FIELDS.goalsObjectives),
-            //        preferences: checkFields(newData.preferencesRequirements, REQUIRED_FIELDS.preferencesRequirements)
-            //    }
-            //});
-
-            //elizaLogger.info("Final Result:", {
-            //    username,
-            //    isComplete,
-            //    data: JSON.stringify(newData, null, 2)
-            //});
-            //elizaLogger.info("=== UserProfileEvaluator Completed ===");
-
-            // Store updated data in cache
-            const cacheData: UserProfileCache = {
-                data: newData,
-                lastUpdated: Date.now()
-            };
-
-            await runtime.cacheManager.set(cacheKey, cacheData);
-
-            // If profile is complete, add/update in match pool
-            if (newData.completed) {
-                const poolCache = await runtime.cacheManager.get<MatchPoolCache>("matchmaker/pool") || { pools: [], lastUpdated: 0 };
-
-                const matchPoolEntry: MatchPool = {
-                    userId: message.userId,
-                    username: username,
-                    lastActive: Date.now(),
-                    matchIntention: newData
+            // Initialize DKG client with minimal retries
+            try {
+                // Load environment variables
+                const envVars = {
+                    environment: process.env.OT_ENVIRONMENT || 'testnet',
+                    endpoint: process.env.OT_NODE_HOSTNAME || 'https://v6-pegasus-node-02.origin-trail.network',
+                    port: parseInt(process.env.OT_NODE_PORT || '8900', 10),
+                    blockchain: {
+                        name: process.env.OT_BLOCKCHAIN_NAME || 'gnosis:10200',
+                        publicKey: process.env.OT_PUBLIC_KEY,
+                        privateKey: process.env.OT_PRIVATE_KEY,
+                    },
+                    maxNumberOfRetries: 2,
+                    frequency: 1,
+                    contentType: "all",
+                    nodeApiVersion: "/v1"
                 };
 
-                // Update existing entry or add new one
-                const existingIndex = poolCache.pools.findIndex(p => p.userId === message.userId);
-                if (existingIndex >= 0) {
-                    poolCache.pools[existingIndex] = matchPoolEntry;
-                } else {
-                    poolCache.pools.push(matchPoolEntry);
+                elizaLogger.info("DKG Environment Variables:", {
+                    environment: envVars.environment,
+                    endpoint: envVars.endpoint,
+                    port: envVars.port,
+                    blockchain: {
+                        name: envVars.blockchain.name,
+                        publicKey: envVars.blockchain.publicKey ? '[REDACTED]' : undefined,
+                        privateKey: '[REDACTED]'
+                    }
+                });
+
+                // Check for required blockchain credentials
+                if (!envVars.blockchain.publicKey || !envVars.blockchain.privateKey) {
+                    throw new Error('Missing required DKG blockchain credentials (OT_PUBLIC_KEY and/or OT_PRIVATE_KEY)');
                 }
 
-                poolCache.lastUpdated = Date.now();
-                await runtime.cacheManager.set("matchmaker/pool", poolCache);
+                const dkgClient = new DKG(envVars);
 
-                elizaLogger.info("Updated match pool:", {
-                    username,
-                    poolSize: poolCache.pools.length,
-                    action: existingIndex >= 0 ? 'updated' : 'added'
+                elizaLogger.info("Creating DKG asset...");
+
+                try {
+                    const createAssetResult = await dkgClient.asset.create(
+                        {
+                            public: knowledgeGraph,
+                        },
+                        { epochsNum: 12 }
+                    );
+
+                    if (!createAssetResult?.UAL) {
+                        throw new Error('DKG asset created but no UAL returned');
+                    }
+
+                    const explorerLink = `${envVars.environment === 'mainnet' ?
+                        'https://dkg.origintrail.io/explore?ual=' :
+                        'https://dkg-testnet.origintrail.io/explore?ual='}${createAssetResult.UAL}`;
+
+                    elizaLogger.info("Knowledge graph published to DKG:", {
+                        UAL: createAssetResult.UAL,
+                        explorerLink
+                    });
+
+                    return true;
+                } catch (assetError) {
+                    elizaLogger.error("Error creating DKG asset:", {
+                        error: {
+                            name: assetError.name,
+                            message: assetError.message,
+                            stack: assetError.stack
+                        },
+                        config: {
+                            environment: envVars.environment,
+                            endpoint: envVars.endpoint,
+                            port: envVars.port,
+                            blockchain: envVars.blockchain.name
+                        }
+                    });
+                    throw assetError;
+                }
+            } catch (error) {
+                elizaLogger.error("Error with DKG operations:", {
+                    error: {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack
+                    },
+                    knowledgeGraph
                 });
+                // Continue even if DKG fails - we still extracted the interests
+                return true;
             }
 
-            return true;
         } catch (error) {
             elizaLogger.error("Error in userProfileEvaluator handler:", error);
             return false;
         }
     },
 
-    examples: []
-    /*
     examples: [
         {
-            context: "VC partner seeking investment opportunities",
+            context: "User discussing their interests",
             messages: [
                 {
                     user: "User",
                     content: {
-                        text: "Hello! I'm a partner at a VC firm looking to expand our portfolio in B2B SaaS and fintech startups. We focus on Series A, typically investing $3-8M in companies with proven product-market fit and at least $1M ARR. We primarily invest in North America and Europe, but we're open to remote-first teams as long as they're incorporated in these regions. We often co-invest and are always looking to expand our network of co-investors."
+                        text: "I'm really into blockchain technology, especially Ethereum and DeFi. I also enjoy developing software and attending tech conferences."
                     }
                 }
             ],
-            outcome: "Extracted profile of a VC partner focusing on Series A B2B SaaS and fintech startups in North America and Europe, investing $3-8M with specific metrics requirements, seeking both founders and co-investors"
+            outcome: JSON.stringify({
+                "@context": "https://schema.org",
+                "@type": "Person",
+                "@id": "uuid:example_user",
+                "identifier": "example_user",
+                "dateCreated": "2024-01-23T12:00:00Z",
+                "lastModified": "2024-01-23T12:00:00Z",
+                "hasInterest": [
+                    {
+                        "@type": "Thing",
+                        "category": "technology",
+                        "about": "crypto",
+                        "keywords": ["Ethereum", "DeFi", "blockchain"],
+                        "metadata": {
+                            "confidence": 0.9,
+                            "evidence": "User explicitly mentions interest in Ethereum and DeFi technologies"
+                        }
+                    },
+                    {
+                        "@type": "Thing",
+                        "category": "business & industry",
+                        "about": "engineering",
+                        "keywords": ["software development", "tech conferences"],
+                        "metadata": {
+                            "confidence": 0.8,
+                            "evidence": "User mentions software development and attending tech conferences"
+                        }
+                    }
+                ],
+                "metadata": {
+                    "@type": "DataFeedItem",
+                    "provider": {
+                        "@type": "Organization",
+                        "name": "Eliza Matchmaker"
+                    }
+                }
+            }, null, 2)
         }
     ]
-    */
 };
-
-function mergeWithConfidence<T extends { confidence: Record<string, number> }>(current: T, extracted: T): T {
-    if (!extracted) return current;
-
-    const merged = { ...current };
-
-    // Merge each field, keeping the version with higher confidence
-    Object.keys(extracted).forEach(key => {
-        if (key === 'confidence') return;
-
-        const currentConfidence = current.confidence[key] || 0;
-        const extractedConfidence = extracted.confidence[key] || 0;
-
-        if (extractedConfidence >= (currentConfidence - 0.2)) {
-            merged[key] = extracted[key];
-            merged.confidence[key] = Math.max(extractedConfidence, currentConfidence);
-        }
-    });
-
-    return merged;
-}
-
-function checkCompletion(data: UserProfile): boolean {
-    // Add debug logging
-    elizaLogger.info("Checking Profile Completion:", {
-        professionalContext: data.professionalContext,
-        goalsObjectives: data.goalsObjectives,
-        preferencesRequirements: data.preferencesRequirements
-    });
-
-    // Simply check if there are any missing fields
-    const missingFields = formatMissingFields(data);
-    const isComplete = missingFields.length === 0;
-
-    elizaLogger.info("Profile Completion Result:", {
-        isComplete,
-        missingFields
-    });
-    return isComplete;
-}
-
-function formatMissingFields(data: UserProfile): string[] {
-    const missing: string[] = [];
-
-    // Check professional context
-    REQUIRED_FIELDS.professionalContext.forEach(field => {
-        if (!data.professionalContext?.[field]) {
-            missing.push(`professional ${field}`);
-        }
-    });
-
-    // Check goals and objectives
-    REQUIRED_FIELDS.goalsObjectives.forEach(field => {
-        if (!data.goalsObjectives?.[field]) {
-            missing.push(`goals ${field}`);
-        }
-    });
-
-    // Check preferences and requirements
-    REQUIRED_FIELDS.preferencesRequirements.forEach(field => {
-        if (!data.preferencesRequirements?.[field]) {
-            missing.push(`preferences ${field}`);
-        }
-    });
-
-    return missing;
-}

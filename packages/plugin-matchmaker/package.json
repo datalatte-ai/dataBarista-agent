@@ -20,6 +20,7 @@
     ],
     "dependencies": {
         "@elizaos/core": "workspace:*",
+        "dkg.js": "^8.0.4",
         "tsup": "8.3.5"
     },
     "scripts": {
