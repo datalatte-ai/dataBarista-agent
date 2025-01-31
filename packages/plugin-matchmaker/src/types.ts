@@ -48,3 +48,6 @@ export interface UserProfileCache {
         conversationHistory: string[];
     };
 }
+
+// DKG Types
+export type UUID = string;
