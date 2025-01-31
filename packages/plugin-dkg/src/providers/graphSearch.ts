@@ -6,27 +6,27 @@ import {
     Provider,
     State,
     elizaLogger,
-    generateText,
     ModelClass,
+    generateObject,
 } from "@elizaos/core";
 import {
     combinedSparqlExample,
     dkgMemoryTemplate,
     generalSparqlQuery,
-    sparqlExamples,
 } from "../constants.ts";
 // @ts-ignore
 import DKG from "dkg.js";
+import { DKGSelectQuerySchema, isDKGSelectQuery } from "../types.ts";
 
 // Provider configuration
 const PROVIDER_CONFIG = {
-    environment: process.env.ENVIRONMENT || "testnet",
-    endpoint: process.env.OT_NODE_HOSTNAME || "http://default-endpoint",
-    port: process.env.OT_NODE_PORT || "8900",
+    environment: process.env.DKG_ENVIRONMENT || "testnet",
+    endpoint: process.env.DKG_HOSTNAME || "http://default-endpoint",
+    port: process.env.DKG_PORT || "8900",
     blockchain: {
-        name: process.env.BLOCKCHAIN_NAME || "base:84532",
-        publicKey: process.env.PUBLIC_KEY || "",
-        privateKey: process.env.PRIVATE_KEY || "",
+        name: process.env.DKG_BLOCKCHAIN_NAME || "base:84532",
+        publicKey: process.env.DKG_PUBLIC_KEY || "",
+        privateKey: process.env.DKG_PRIVATE_KEY || "",
     },
     maxNumberOfRetries: 300,
     frequency: 2,
@@ -81,13 +81,19 @@ async function constructSparqlQuery(
     Provide only the SPARQL query, wrapped in a sparql code block for clarity.
   `;
 
-    const sparqlQuery = await generateText({
+    const sparqlQueryResult = await generateObject({
         runtime,
         context,
         modelClass: ModelClass.LARGE,
+        schema: DKGSelectQuerySchema,
     });
 
-    return sparqlQuery.replace(/```sparql|```/g, "").trim();
+    if (!isDKGSelectQuery(sparqlQueryResult.object)) {
+        elizaLogger.error("Invalid SELECT SPARQL query generated.");
+        throw new Error("Invalid SELECT SPARQL query generated.");
+    }
+
+    return sparqlQueryResult.object.query;
 }
 
 export class DKGProvider {
@@ -101,6 +107,9 @@ export class DKGProvider {
 
         for (const field of requiredStringFields) {
             if (typeof config[field as keyof DKGClientConfig] !== "string") {
+                elizaLogger.error(
+                    `Invalid configuration: Missing or invalid value for '${field}'`
+                );
                 throw new Error(
                     `Invalid configuration: Missing or invalid value for '${field}'`
                 );
@@ -108,6 +117,9 @@ export class DKGProvider {
         }
 
         if (!config.blockchain || typeof config.blockchain !== "object") {
+            elizaLogger.error(
+                "Invalid configuration: 'blockchain' must be an object"
+            );
             throw new Error(
                 "Invalid configuration: 'blockchain' must be an object"
             );
@@ -120,6 +132,9 @@ export class DKGProvider {
                 typeof config.blockchain[field as keyof BlockchainConfig] !==
                 "string"
             ) {
+                elizaLogger.error(
+                    `Invalid configuration: Missing or invalid value for 'blockchain.${field}'`
+                );
                 throw new Error(
                     `Invalid configuration: Missing or invalid value for 'blockchain.${field}'`
                 );
@@ -159,8 +174,7 @@ export class DKGProvider {
             `Got ${queryOperationResult.data.length} results from the DKG`
         );
 
-        // TODO: take 5 results instead of all based on similarity probably
-        // TODO: idk dont love this format, maybe change it
+        // TODO: take 5 results instead of all based on similarity in the future
         const result = queryOperationResult.data.map((entry: any) => {
             const formattedParts = Object.keys(entry).map(
                 (key) => `${key}: ${entry[key]}`
@@ -183,7 +197,7 @@ export const graphSearch: Provider = {
 
             return await provider.search(runtime, _message);
         } catch (error) {
-            console.error("Error in wallet provider:", error);
+            elizaLogger.error("Error in wallet provider:", error);
             return null;
         }
     },

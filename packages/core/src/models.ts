@@ -69,11 +69,11 @@ export const models: Models = {
             presence_penalty: 0.4,
             temperature: 0.7,
         },
-        endpoint: "https://api.anthropic.com/v1", // TODO: check
+        endpoint: "https://europe-west1-aiplatform.googleapis.com/v1/projects/datalatte-381508/locations/europe-west1/", // TODO: check
         model: {
             [ModelClass.SMALL]: "claude-3-5-sonnet-20241022",
             [ModelClass.MEDIUM]: "claude-3-5-sonnet-20241022",
-            [ModelClass.LARGE]: "claude-3-opus-20240229",
+            [ModelClass.LARGE]: "claude-3-5-sonnet-20241022",
         },
     },
     [ModelProviderName.GROK]: {

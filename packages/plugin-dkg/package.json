@@ -1,6 +1,6 @@
 {
     "name": "@elizaos/plugin-dkg",
-    "version": "0.1.0",
+    "version": "0.1.9",
     "type": "module",
     "main": "dist/index.js",
     "module": "dist/index.js",
@@ -21,8 +21,7 @@
     "dependencies": {
         "@elizaos/core": "workspace:*",
         "dkg.js": "^8.0.4",
-        "tsup": "8.3.5",
-        "agent-twitter-client": "0.0.18"
+        "tsup": "8.3.5"
     },
     "scripts": {
         "build": "tsup --format esm --dts",
@@ -31,5 +30,8 @@
     },
     "peerDependencies": {
         "whatwg-url": "7.1.0"
+    },
+    "devDependencies": {
+        "typescript": "4.9"
     }
 }

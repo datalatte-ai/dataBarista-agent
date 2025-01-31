@@ -19,18 +19,16 @@ import {
     MatchRecord
 } from "../types";
 
+// TODO: Define JSON-LD interfaces for knowledge graph integration
+
+}
+
 interface MatchCandidate {
     username: string;
     score: number;
     reasons: string[];
     complementaryFactors: string[];
 }
-
-interface MatchEvaluation {
-    bestMatch: MatchCandidate | null;
-    evaluationSummary: string;
-}
-
 export const serendipityAction: Action = {
     name: "SERENDIPITY",
     description: "Call this action when user has completed their profile and is searching for a match.",

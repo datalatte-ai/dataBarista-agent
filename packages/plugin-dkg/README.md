@@ -8,8 +8,6 @@ The DKG plugin extends ElizaOS functionality by allowing agents to interact with
 
 ## Installation
 
-(This will only work once the official DKG plugin is integrated to ElizaOS)
-
 ```bash
 pnpm install @elizaos/plugin-dkg
 ```
@@ -76,6 +74,7 @@ pnpm run lint
 ### 2. Customize DKG Knowledge Asset & Query Templates
 
 - Modify the templates in `plugin-dkg/constants.ts` if you need to change the ontology or data format used in the Knowledge Graph.
+- Check if the graph search provider is passing context to the agent (packages/client-twitter/src/interactions.ts, twitterMessageHandlerTemplate)
 
 ### 3. Create a Character and Run the Agent
 
@@ -87,15 +86,13 @@ pnpm run lint
 
 ### Notes
 
-- There is no need to manually add `plugin-dkg` to the `plugins` array; it will load automatically.
-- Ensure you configure the Twitter client and select your LLM provider in the character settings.
+- Ensure you configure the Twitter client and select your LLM provider in the character settings, also include the plugin in your agent.
 
 ## Dependencies
 
 - @elizaos/core: workspace:\*
 - SPARQL query library: workspace:\*
 - DKG JavaScript SDK: dkg.js > ^8.0.4
-- Twitter Agent Client: agent-twitter-client = 0.0.18
 
 ## Contributing
 

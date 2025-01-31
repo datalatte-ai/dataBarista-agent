@@ -1,1 +1,1 @@
-export * from "./userProfileEvaluator.ts";
+export * from "./professionalProfileEvaluator.ts";

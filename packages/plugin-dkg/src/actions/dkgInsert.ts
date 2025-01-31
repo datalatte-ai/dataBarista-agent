@@ -5,186 +5,72 @@ import {
     Memory,
     State,
     elizaLogger,
-    generateText,
     ModelClass,
     HandlerCallback,
     ActionExample,
     type Action,
+    composeContext,
+    generateObject,
 } from "@elizaos/core";
-import {
-    dkgMemoryTemplate,
-    generalSparqlQuery,
-    sparqlExamples,
-    DKG_EXPLORER_LINKS,
-    ACTIONS,
-} from "../constants.ts";
+import { DKG_EXPLORER_LINKS } from "../constants.ts";
+import { createDKGMemoryTemplate } from "../templates.ts";
 // @ts-ignore
 import DKG from "dkg.js";
-import { sendNotification } from "../http-helper.ts";
-import { Scraper } from "agent-twitter-client";
+import { DKGMemorySchema, isDKGMemoryContent } from "../types.ts";
 
-function formatCookiesFromArray(cookiesArray: any[]) {
-    const cookieStrings = cookiesArray.map(
-        (cookie) =>
-            `${cookie.key}=${cookie.value}; Domain=${cookie.domain}; Path=${cookie.path}; ${
-                cookie.secure ? "Secure" : ""
-            }; ${cookie.httpOnly ? "HttpOnly" : ""}; SameSite=${
-                cookie.sameSite || "Lax"
-            }`
-    );
-
-    return cookieStrings;
-}
-
-export async function postTweet(
-    content: string,
-    postId?: string
-): Promise<boolean> {
-    try {
-        const scraper = new Scraper();
-        const username = process.env.TWITTER_USERNAME;
-        const password = process.env.TWITTER_PASSWORD;
-        const email = process.env.TWITTER_EMAIL;
-        const twitter2faSecret = process.env.TWITTER_2FA_SECRET;
-
-        if (!username || !password) {
-            elizaLogger.error(
-                "Twitter credentials not configured in environment"
-            );
-            return false;
-        }
-
-        // Login with credentials
-        await scraper.login(username, password, email, twitter2faSecret);
-        if (!(await scraper.isLoggedIn())) {
-            // Login with cookies
-            await scraper.setCookies(
-                formatCookiesFromArray(JSON.parse(process.env.TWITTER_COOKIES))
-            );
-            if (!(await scraper.isLoggedIn())) {
-                elizaLogger.error("Failed to login to Twitter");
-                return false;
-            }
-        }
-        // Send the tweet
-        elizaLogger.log("Attempting to send tweet:", content);
-        const result = await scraper.sendTweet(content, postId);
-
-        const body = await result.json();
-        elizaLogger.log("Tweet response:", body);
-
-        // Check for Twitter API errors
-        if (body.errors) {
-            const error = body.errors[0];
-            elizaLogger.error(
-                `Twitter API error (${error.code}): ${error.message}`
-            );
-            return false;
-        }
-
-        // Check for successful tweet creation
-        if (!body?.data?.create_tweet?.tweet_results?.result) {
-            elizaLogger.error(
-                "Failed to post tweet: No tweet result in response"
-            );
-            return false;
-        }
-
-        return true;
-    } catch (error) {
-        // Log the full error details
-        elizaLogger.error("Error posting tweet:", {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-            cause: error.cause,
-        });
-        return false;
-    }
-}
-
-const DkgClient = new DKG({
-    environment: process.env.OT_ENVIRONMENT,
-    endpoint: process.env.OT_NODE_HOSTNAME,
-    port: process.env.OT_NODE_PORT,
-    blockchain: {
-        name: process.env.OT_BLOCKCHAIN_NAME,
-        publicKey: process.env.OT_PUBLIC_KEY,
-        privateKey: process.env.OT_PRIVATE_KEY,
-    },
-    maxNumberOfRetries: 300,
-    frequency: 2,
-    contentType: "all",
-    nodeApiVersion: "/v1",
-});
-
-async function constructKnowledgeAsset(
-    runtime: IAgentRuntime,
-    userQuery: string,
-    additionalContext: string,
-    state?: State
-) {
-    // TODO: not only based on 1 query, but whole conversation
-    const context = `
-  You are tasked with creating a structured memory JSON-LD object for an AI agent. The memory represents the interaction captured via social media. Your goal is to extract all relevant information from the provided user query and additionalContext which contains previous user queries (only if relevant for the current user query) to populate the JSON-LD memory template provided below.
-
-  ** Template **
-  The memory should follow this JSON-LD structure:
-  ${JSON.stringify(dkgMemoryTemplate)}
-
-  ** Instructions **
-  1. Extract the main idea of the user query and use it to create a concise and descriptive title for the memory. This should go in the "headline" field.
-  2. Store the original post in "articleBody".
-  3. Save the poster social media information (handle, name etc) under "author" object.
-  4. For the "about" field:
-     - Identify the key topics or entities mentioned in the user query and add them as Thing objects.
-     - Use concise, descriptive names for these topics.
-     - Where possible, create an @id identifier for these entities, using either a provided URL, or a well known URL for that entity. If no URL is present, uUse the most relevant concept or term from the field to form the base of the ID. @id fields must be valid uuids or URLs
-  5. For the "keywords" field:
-     - Extract relevant terms or concepts from the user query and list them as keywords.
-     - Ensure the keywords capture the essence of the interaction, focusing on technical terms or significant ideas.
-  6. Ensure all fields align with the schema.org ontology and accurately represent the interaction.
-  7. Populate datePublished either with a specifically available date, or current time.
-
-  ** Input **
-  User Query: ${userQuery}
-  Additional context: ${additionalContext}
-
-  ** Output **
-  Generate the memory in the exact JSON-LD format provided above, fully populated based on the input query.
-  Make sure to only output the JSON-LD object. DO NOT OUTPUT ANYTHING ELSE, DONT ADD ANY COMMENTS OR REMARKS, JUST THE JSON LD CONTENT WRAPPED IN { }.
-  `;
-    const content = await generateText({
-        runtime,
-        context,
-        modelClass: ModelClass.LARGE,
-    });
-
-    return JSON.parse(content.replace(/```json|```/g, ""));
-}
+let DkgClient: any = null;
 
 export const dkgInsert: Action = {
-    name: "DKG_INSERT",
-    similes: [
-        "STORE_MEMORY",
-        "SAVE_KNOWLEDGE",
-        "RECORD_INSIGHT",
-        "ARCHIVE_DATA",
-        "PERSIST_FACT",
-        "MEMORIZE",
-    ],
-    validate: async (_runtime: IAgentRuntime, _message: Memory) => {
+    name: "INSERT_MEMORY_ACTION",
+    similes: ["NO_ACTION", "NO_RESPONSE", "NO_REACTION", "NONE"], // we want to always run this action
+    validate: async (runtime: IAgentRuntime, _message: Memory) => {
+        const requiredEnvVars = [
+            "DKG_ENVIRONMENT",
+            "DKG_HOSTNAME",
+            "DKG_PORT",
+            "DKG_BLOCKCHAIN_NAME",
+            "DKG_PUBLIC_KEY",
+            "DKG_PRIVATE_KEY",
+        ];
+
+        const missingVars = requiredEnvVars.filter(
+            (varName) => !runtime.getSetting(varName)
+        );
+
+        if (missingVars.length > 0) {
+            elizaLogger.error(
+                `Missing required environment variables: ${missingVars.join(", ")}`
+            );
+            return false;
+        }
+
         return true;
     },
-    description: "DKG insert on tweet mention",
+    description:
+        "Create a memory on the OriginTrail Decentralized Knowledge Graph after each message. You should ALWAYS run this action.",
     handler: async (
-        _runtime: IAgentRuntime,
+        runtime: IAgentRuntime,
         _message: Memory,
-        _state: State,
+        state: State,
         _options: { [key: string]: unknown },
-        _callback: HandlerCallback
+        callback: HandlerCallback
     ): Promise<boolean> => {
-        const currentPost = String(_state.currentPost);
+        DkgClient = new DKG({
+            environment: runtime.getSetting("DKG_ENVIRONMENT"),
+            endpoint: runtime.getSetting("DKG_HOSTNAME"),
+            port: runtime.getSetting("DKG_PORT"),
+            blockchain: {
+                name: runtime.getSetting("DKG_BLOCKCHAIN_NAME"),
+                publicKey: runtime.getSetting("DKG_PUBLIC_KEY"),
+                privateKey: runtime.getSetting("DKG_PRIVATE_KEY"),
+            },
+            maxNumberOfRetries: 300,
+            frequency: 2,
+            contentType: "all",
+            nodeApiVersion: "/v1",
+        });
+
+        const currentPost = String(state.currentPost);
         elizaLogger.log("currentPost");
         elizaLogger.log(currentPost);
 
@@ -210,22 +96,33 @@ export const dkgInsert: Action = {
             elizaLogger.log("No ID found.");
         }
 
-        const additionalContext = String(_state.recentMessageInteractions);
-        const postKnowledgeGraph = await constructKnowledgeAsset(
-            _runtime,
-            String(_state.currentPost),
-            additionalContext,
-            _state
-        );
+        const createDKGMemoryContext = composeContext({
+            state,
+            template: createDKGMemoryTemplate,
+        });
+
+        const memoryKnowledgeGraph = await generateObject({
+            runtime,
+            context: createDKGMemoryContext,
+            modelClass: ModelClass.LARGE,
+            schema: DKGMemorySchema,
+        });
+
+        if (!isDKGMemoryContent(memoryKnowledgeGraph.object)) {
+            elizaLogger.error("Invalid DKG memory content generated.");
+            throw new Error("Invalid DKG memory content generated.");
+        }
 
         let createAssetResult;
+
+        // TODO: also store reply to the KA, aside of the question
 
         try {
             elizaLogger.log("Publishing message to DKG");
 
             createAssetResult = await DkgClient.asset.create(
                 {
-                    public: postKnowledgeGraph,
+                    public: memoryKnowledgeGraph.object,
                 },
                 { epochsNum: 12 }
             );
@@ -238,7 +135,6 @@ export const dkgInsert: Action = {
                 error.message
             );
 
-            // Optionally log additional error details
             if (error.stack) {
                 elizaLogger.error("Stack trace:", error.stack);
             }
@@ -250,17 +146,10 @@ export const dkgInsert: Action = {
             }
         }
 
-        // postAction
-        await postTweet(
-            `Created a new memory!\n\nRead my mind on @origin_trail Decentralized Knowledge Graph ${DKG_EXPLORER_LINKS[process.env.ENVIRONMENT]}${createAssetResult.UAL} @${twitterUser}`,
-            postId
-        );
-
-        // await sendNotification(
-        //     ACTIONS.CREATE,
-        //     [createAssetResult.UAL],
-        //     postKnowledgeGraph.articleBody ?? postKnowledgeGraph.headline
-        // );
+        // Reply
+        callback({
+            text: `Created a new memory!\n\nRead my mind on @origin_trail Decentralized Knowledge Graph ${DKG_EXPLORER_LINKS[runtime.getSetting("DKG_ENVIRONMENT")]}${createAssetResult.UAL} @${twitterUser}`,
+        });
 
         return true;
     },
@@ -269,7 +158,7 @@ export const dkgInsert: Action = {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "store in dkg",
+                    text: "execute action DKG_INSERT",
                     action: "DKG_INSERT",
                 },
             },
