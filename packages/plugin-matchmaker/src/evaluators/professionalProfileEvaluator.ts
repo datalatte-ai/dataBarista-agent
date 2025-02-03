@@ -1,6 +1,6 @@
-import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, State, elizaLogger, composeContext, generateObject } from "@elizaos/core";
+import { Evaluator, IAgentRuntime, Memory, ModelClass, generateObjectArray, State, elizaLogger, composeContext } from "@elizaos/core";
 import { ProfessionalProfile, UserProfileCache } from "../types";
-import { extractionTemplate, profileToJsonLdTemplate } from "../templates";
+import { extractionTemplate, KGExtractionTemplate } from "../templates";
 import { INITIAL_PROFILE } from '../constants';
 import { isProfileReadyForDKG } from '../utils';
 // @ts-ignore
@@ -116,41 +116,25 @@ export const professionalProfileEvaluator: Evaluator = {
                         });
                     }
 
-                    // Test with DKG-compatible JSON-LD
-                    const testJsonLd = {
-                        "@context": "http://schema.org",
-                        "@type": "SocialMediaPosting",
-                        "@id": "https://www.linkedin.com/in/johndoe",
-                        "headline": "Professional Profile: AI Agent Developer Search",
-                        "articleBody": "Looking for senior AI agent developers with Masters degree",
-                        "about": [{
-                            "@type": "Thing",
-                            "@id": "http://schema.org/AITechnology",
-                            "name": "AI Agent Development",
-                            "url": "http://schema.org/AITechnology"
-                        }],
-                        "keywords": [{
-                            "@type": "Text",
-                            "@id": "tag:ai-agents",
-                            "name": "AI Agents"
-                        }, {
-                            "@type": "Text",
-                            "@id": "tag:senior-developer",
-                            "name": "Senior Developer"
-                        }]
-                    };
-
-                    const PrivatetestJsonLd = {
-                        "@context": "http://schema.org",
-                        "@type": "SocialMediaPosting",
-                        "@id": "https://www.linkedin.com/in/johndoe",
-                        "headline": "A very private message",
-                        "articleBody": "PRIVATE nodboy should be able to see this",
-                    };
-
-                    elizaLogger.info("Test JSON-LD:", {
-                        testJsonLd
+                    // Use kgExtractionTemplate to generate JSON-LD
+                    const context = composeContext({
+                        template: KGExtractionTemplate,
+                        state: {
+                            profile: JSON.stringify(mergedProfile, null, 2),
+                        }
                     });
+
+                    const jsonLdArray = await generateObjectArray({
+                        runtime,
+                        context,
+                        modelClass: ModelClass.LARGE
+                    });
+
+                    if (!jsonLdArray || jsonLdArray.length === 0) {
+                        return false;
+                    }
+
+                    const { public: publicJsonLd, private: privateJsonLd } = jsonLdArray[0];
 
                     // Publish to DKG
                     elizaLogger.info("Publishing profile to DKG with client config:", {
@@ -166,13 +150,11 @@ export const professionalProfileEvaluator: Evaluator = {
 
                         createAssetResult = await DkgClient.asset.create(
                             {
-                                public: testJsonLd,
-                                private: PrivatetestJsonLd
+                                public: publicJsonLd,
+                                private: privateJsonLd
                             },
                             { epochsNum: 12 }
                         );
-
-
 
                         elizaLogger.log("=== Personal Knowledge Asset Created ===");
                         elizaLogger.log(`UAL: ${createAssetResult.UAL}`);
